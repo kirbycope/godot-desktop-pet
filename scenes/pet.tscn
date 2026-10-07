@@ -1,0 +1,241 @@
+[gd_scene load_steps=16 format=3]
+
+[ext_resource type="Script" path="res://scripts/pet.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/duck.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/brain.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/voice.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/screen_reader.gd" id="5"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
+size = Vector2(124, 108)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bubble"]
+bg_color = Color(1, 1, 1, 0.97)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.2, 0.24, 0.32, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_input"]
+bg_color = Color(1, 1, 0.94, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.86, 0.6, 0.05, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_input_focus"]
+bg_color = Color(1, 1, 1, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.95, 0.5, 0, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_input_off"]
+bg_color = Color(0.93, 0.93, 0.93, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.7, 0.7, 0.7, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_tabs"]
+content_margin_top = 6.0
+
+[sub_resource type="Theme" id="Theme_bubble"]
+Label/colors/font_color = Color(0.12, 0.14, 0.2, 1)
+LineEdit/colors/font_color = Color(0.12, 0.14, 0.2, 1)
+LineEdit/colors/font_placeholder_color = Color(0.45, 0.4, 0.3, 1)
+LineEdit/colors/caret_color = Color(0.12, 0.14, 0.2, 1)
+LineEdit/font_sizes/font_size = 15
+LineEdit/styles/focus = SubResource("StyleBoxFlat_input_focus")
+LineEdit/styles/normal = SubResource("StyleBoxFlat_input")
+LineEdit/styles/read_only = SubResource("StyleBoxFlat_input_off")
+RichTextLabel/colors/default_color = Color(0.12, 0.14, 0.2, 1)
+TabContainer/styles/panel = SubResource("StyleBoxEmpty_tabs")
+
+[node name="Pet" type="Node2D"]
+script = ExtResource("1")
+
+[node name="View" type="SubViewportContainer" parent="."]
+offset_right = 144.0
+offset_bottom = 144.0
+mouse_filter = 2
+stretch = true
+
+[node name="Viewport" type="SubViewport" parent="View"]
+own_world_3d = true
+transparent_bg = true
+handle_input_locally = false
+msaa_3d = 2
+size = Vector2i(144, 144)
+render_target_update_mode = 4
+
+[node name="Duck" parent="View/Viewport" instance=ExtResource("2")]
+
+[node name="Body" type="Area2D" parent="."]
+position = Vector2(72, 72)
+
+[node name="Shape" type="CollisionShape2D" parent="Body"]
+position = Vector2(0, 16)
+shape = SubResource("RectangleShape2D_body")
+
+[node name="IdleTimer" type="Timer" parent="."]
+one_shot = true
+
+[node name="Brain" type="Node" parent="."]
+script = ExtResource("3")
+
+[node name="ModelsRequest" type="HTTPRequest" parent="Brain"]
+timeout = 10.0
+
+[node name="ChatRequest" type="HTTPRequest" parent="Brain"]
+timeout = 120.0
+
+[node name="Voice" type="Node" parent="."]
+script = ExtResource("4")
+
+[node name="ScreenReader" type="Node" parent="."]
+script = ExtResource("5")
+
+[node name="Bubble" type="Window" parent="."]
+transparent_bg = true
+title = "Rubber Duck"
+size = Vector2i(340, 240)
+visible = false
+unresizable = true
+borderless = true
+always_on_top = true
+transparent = true
+
+[node name="Panel" type="PanelContainer" parent="Bubble"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_bubble")
+theme_override_styles/panel = SubResource("StyleBoxFlat_bubble")
+
+[node name="Margin" type="MarginContainer" parent="Bubble/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="Tabs" type="TabContainer" parent="Bubble/Panel/Margin"]
+layout_mode = 2
+current_tab = 0
+
+[node name="Chat" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
+layout_mode = 2
+metadata/_tab_index = 0
+
+[node name="Text" type="RichTextLabel" parent="Bubble/Panel/Margin/Tabs/Chat"]
+layout_mode = 2
+size_flags_vertical = 3
+scroll_following = true
+
+[node name="Entry" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Chat"]
+layout_mode = 2
+
+[node name="Input" type="LineEdit" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Explain your code, then Enter"
+editable = false
+
+[node name="Send" type="Button" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
+layout_mode = 2
+disabled = true
+text = "Send"
+
+[node name="Stats" type="RichTextLabel" parent="Bubble/Panel/Margin/Tabs"]
+visible = false
+layout_mode = 2
+selection_enabled = true
+metadata/_tab_index = 1
+
+[node name="Settings" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 2
+
+[node name="VoiceLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings"]
+layout_mode = 2
+text = "Voice"
+
+[node name="Voices" type="OptionButton" parent="Bubble/Panel/Margin/Tabs/Settings"]
+layout_mode = 2
+clip_text = true
+fit_to_longest_item = false
+
+[node name="Buttons" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Settings"]
+layout_mode = 2
+
+[node name="Test" type="Button" parent="Bubble/Panel/Margin/Tabs/Settings/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Test"
+
+[node name="Apply" type="Button" parent="Bubble/Panel/Margin/Tabs/Settings/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Apply"
+
+[node name="Current" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings"]
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 3
+text_overrun_behavior = 3
+
+[node name="Menu" type="PopupMenu" parent="."]
+item_count = 1
+item_0/text = "Quit"
+item_0/id = 0
+
+[connection signal="input_event" from="Body" to="." method="_on_area_input_event"]
+[connection signal="timeout" from="IdleTimer" to="." method="_on_idle_timer_timeout"]
+[connection signal="status_changed" from="Brain" to="." method="_on_brain_status_changed"]
+[connection signal="replied" from="Brain" to="." method="_on_brain_replied"]
+[connection signal="request_completed" from="Brain/ModelsRequest" to="Brain" method="_on_models_request_completed"]
+[connection signal="request_completed" from="Brain/ChatRequest" to="Brain" method="_on_chat_request_completed"]
+[connection signal="finished" from="Voice" to="." method="_on_voice_finished"]
+[connection signal="read_finished" from="ScreenReader" to="." method="_on_screen_reader_read_finished"]
+[connection signal="window_input" from="Bubble" to="." method="_on_bubble_window_input"]
+[connection signal="text_submitted" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Input" to="." method="_on_input_text_submitted"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Send" to="." method="_on_send_pressed"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Settings/Buttons/Test" to="." method="_on_test_pressed"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Settings/Buttons/Apply" to="." method="_on_apply_pressed"]
+[connection signal="id_pressed" from="Menu" to="." method="_on_menu_id_pressed"]

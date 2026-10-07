@@ -1,0 +1,21 @@
+.godot/
+
+# The test runner, third-party and never committed here; see README.md for the one-line clone.
+addons/gut/
+
+# Python bytecode caches from the scripts in tools/
+__pycache__/
+*.pyc
+
+# Exports
+build/
+
+# Windows leaves these behind when Godot rewrites a file in place.
+*~RF*.TMP
+
+# Watchdog runs, local only.
+/watchdog/
+
+# Verification captures from agent runs, local only.
+/screenshots/
+.mcp/
