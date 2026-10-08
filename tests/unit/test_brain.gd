@@ -79,6 +79,8 @@ func test_chat_body_is_openai_shaped() -> void:
 	assert_eq(body["model"], "m")
 	assert_eq(body["messages"], history)
 	assert_eq(body["max_tokens"], 99)
+	assert_true(body.has("presence_penalty"), "chat discourages repeating itself")
+	assert_false(Brain.chat_body("m", history, 99, true).has("frequency_penalty"), "code repeats its marks, so no penalties")
 
 
 func test_a_model_counts_as_loaded_by_alias_or_build() -> void:
@@ -126,3 +128,50 @@ func test_greetings_open_a_conversation_not_a_debugging_session() -> void:
 	var brain: Brain = load("res://scripts/brain.gd").new()
 	assert_string_contains(brain.role, "Do not steer the talk towards code")
 	brain.free()
+
+
+func test_web_results_go_ahead_of_the_users_line() -> void:
+	var history: Array[Dictionary] = [{"role": "system", "content": "s"}, {"role": "user", "content": "search for x"}]
+	var sent: Array[Dictionary] = Brain.with_web(history, "Web search results: x")
+	assert_string_starts_with(sent[-1]["content"], "Web search results: x")
+	assert_string_ends_with(sent[-1]["content"], "search for x")
+	assert_eq(history[-1]["content"], "search for x", "the kept history is untouched")
+	assert_eq(Brain.with_web(history, ""), history, "nothing searched, nothing added")
+
+
+func test_earlier_replies_are_the_ducks_latest() -> void:
+	var history: Array[Dictionary] = [{"role": "system", "content": "s"}, {"role": "user", "content": "a"}, {"role": "assistant", "content": "one"}, {"role": "user", "content": "b"}, {"role": "assistant", "content": "two"}, {"role": "user", "content": "c"}]
+	assert_eq(Brain.earlier_replies(history, 1), PackedStringArray(["two"]))
+	assert_eq(Brain.earlier_replies(history, 5), PackedStringArray(["one", "two"]))
+
+
+func test_the_fallback_is_not_the_one_just_said() -> void:
+	assert_eq(Brain.fresh_fallback(PackedStringArray()), Brain.FALLBACKS[0])
+	assert_eq(Brain.fresh_fallback(PackedStringArray([Brain.FALLBACKS[0]])), Brain.FALLBACKS[1])
+
+
+func test_facts_are_pulled_from_search_results_as_lines() -> void:
+	var results: Array[Dictionary] = [{"title": "Duck facts", "url": "https://example.org", "snippet": "Ducklings can swim within hours."}]
+	var sent: Array[Dictionary] = Brain.facts_prompt(results)
+	assert_string_contains(sent[-1]["content"], "Duck facts: Ducklings can swim within hours.")
+	assert_eq(Brain.parse_facts("Here you go:\n- Ducklings can swim within hours of hatching.\n- Short.\n* A group of ducks on water is called a raft.\n- Three\n- Four is the fourth fact here.\n- Five is the fifth fact here."), PackedStringArray(["Ducklings can swim within hours of hatching.", "A group of ducks on water is called a raft.", "Four is the fourth fact here."]))
+	assert_eq(Brain.parse_facts("NONE"), PackedStringArray())
+	assert_eq(Brain.parse_facts("Ducks are mostly aquatic birds.\n2. Drakes are male ducks, hens female."), PackedStringArray(["Ducks are mostly aquatic birds.", "Drakes are male ducks, hens female."]), "no bullets, or numbers")
+
+
+func test_debugging_gets_the_rubber_duck_reminder_and_small_talk_does_not() -> void:
+	assert_true(Brain.is_debugging("why does this crash?", "", ""))
+	assert_true(Brain.is_debugging("my average is wrong, it should be 90", "", ""))
+	assert_true(Brain.is_debugging("what's going on here?", "", "Uncaught (in promise) TypeError: res.json is not a function"), "pointing at an error on screen")
+	assert_true(Brain.is_debugging("After the wave I set get_tree().paused = true", "", ""), "code in the line")
+	assert_true(Brain.is_debugging("The enemies spawn fine, they just don't move.", "I'm stuck, my enemies stop moving", ""), "still the same bug")
+	assert_false(Brain.is_debugging("what's your favourite colour?", "hi", "func _ready() -> void:"), "an editor on screen is not a bug")
+	assert_false(Brain.is_debugging("what's this?", "", "Weather: sunny"))
+	var history: Array[Dictionary] = [{"role": "system", "content": "s"}, {"role": "user", "content": "x"}]
+	assert_string_ends_with(Brain.with_screen(history, "", Brain.DEBUG_REMINDER)[-1]["content"], Brain.DEBUG_REMINDER)
+
+
+func test_the_earlier_line_is_the_users_message_before_the_last() -> void:
+	var history: Array[Dictionary] = [{"role": "system", "content": "s"}, {"role": "user", "content": "first"}, {"role": "assistant", "content": "a"}, {"role": "user", "content": "second"}]
+	assert_eq(Brain.earlier_user_line(history), "first")
+	assert_eq(Brain.earlier_user_line(history.slice(0, 2)), "")

@@ -6,6 +6,10 @@ extends Node
 ##   user://duck/memories.md      one remembered fact per "- " line
 ##   user://duck/skills/*.md      instructions brought in when a message mentions their trigger words
 ##   user://duck/name.txt         its name, once it has one
+##   user://duck/told.md          the facts it has already told, so it moves on
+##   user://duck/asked.md         the questions it asked lately, so it asks something new
+##   user://duck/learned.md       facts it found on the web once it had told all of its own
+##   user://duck/searched.md      the topics it has searched for facts, so it picks a new one
 ##   user://duck/conversations/   everything said, one Markdown file a day; the last few exchanges
 ##                                go back into the prompt when the duck starts again
 ##
@@ -14,6 +18,8 @@ extends Node
 
 ## Something was remembered, forgotten, learned or renamed, for the bubble to mention.
 signal changed(note: String)
+## Every fact has been told: time to look up some more about `topic`.
+signal out_of_facts(topic: String)
 
 ## The duck's folder. Tests point it elsewhere.
 @export var root: String = "user://duck"
@@ -21,10 +27,24 @@ signal changed(note: String)
 @export var seed: String = "res://seed"
 ## Memories beyond this many are left out of the prompt, oldest first.
 @export var max_memories: int = 40
+## How many of its own recent questions it is told not to ask again.
+@export var max_asked: int = 12
 ## At most this many skills go with one message.
 @export var max_skills: int = 2
+## What it searches the web for, in turn, when it has told every fact it knows.
+@export var fact_topics: PackedStringArray = ["surprising facts about ducks", "history of the rubber duck", "facts about mallard ducks", "facts about ducklings", "how ducks fly and migrate", "facts about duck feathers and swimming", "history of bath time", "Sesame Street history facts"]
+## How long to wait before searching again when a search for facts found none, in seconds.
+@export var fact_search_wait: float = 300.0
 
-const TAG: String = "\\[(remember|forget|name|skill):\\s*(.*?)\\]"
+var _fact_search_at: int = -1
+
+## One character of a sentence: anything but an ending, or a "." or "?" with no space after it, as in "4.5".
+const SENTENCE: String = r"(?:[^.!?]|[.!?](?=[^\s.!?]))"
+
+## Words too ordinary to say which fact a reply was telling.
+const COMMON_WORDS: PackedStringArray = ["about", "after", "their", "there", "which", "where", "would", "could", "people", "other", "while", "every", "first", "being", "still", "these", "those", "ducks", "really", "thing", "things", "that", "with", "have", "this", "from", "they", "them", "then", "than", "what", "when", "your", "just", "like", "more", "some", "into", "were", "been", "also", "only", "over", "does", "duck", "very", "much", "here", "even", "each", "most", "make", "made"]
+
+const TAG: String = "(?i)\\[(remember|forget|name|skill):\\s*(.*?)\\]"
 ## A request rather than a remark: the start of a sentence, or after "please", "and", "can you" and
 ## the like. "I can't remember why" and "do you remember" are not asking the duck to remember.
 const REQUEST: String = r"(?i)(?:^|\b(?:please|and|also|so|now|oh|hey|can you|could you|would you|will you)\s+)(?:please\s+)?"
@@ -132,8 +152,13 @@ func prompt() -> String:
 	var parts: PackedStringArray = PackedStringArray()
 	var called: String = duck_name()
 	parts.append("Your name is %s." % called if not called.is_empty() else "You do not have a name yet. If the user offers you one, take it happily.")
-	parts.append(personality())
+	# Facts it has already told are taken out, so it tells a new one; once all are told, it starts over.
+	var untold: PackedStringArray = untold_facts()
+	parts.append(with_facts(personality(), untold))
 	parts.append(PROTOCOL)
+	var recent_questions: PackedStringArray = asked()
+	if not recent_questions.is_empty():
+		parts.append("Questions you asked lately. Do not ask them again; ask about something new they said:\n- " + "\n- ".join(recent_questions))
 	var known: PackedStringArray = memories()
 	if not known.is_empty():
 		var recent: PackedStringArray = known.slice(maxi(0, known.size() - max_memories))
@@ -142,6 +167,98 @@ func prompt() -> String:
 	if not all_skills.is_empty():
 		parts.append("Skills you have, brought in when they apply: " + ", ".join(all_skills.map(func(s: Dictionary) -> String: return s["name"])) + ".")
 	return "\n\n".join(parts)
+
+
+## The facts listed under "Things you know for sure" in the personality, then those it found on the web.
+func facts() -> PackedStringArray:
+	var all: PackedStringArray = facts_in(personality())
+	all.append_array(learned())
+	return all
+
+
+func learned() -> PackedStringArray:
+	return parse_memories(FileAccess.get_file_as_string(root.path_join("learned.md")))
+
+
+## Keeps facts found on the web, leaving out any it knows already.
+func add_facts(found: PackedStringArray) -> void:
+	var known: PackedStringArray = learned()
+	var all: PackedStringArray = facts()
+	var added: int = 0
+	for fact: String in found:
+		var clean: String = fact.strip_edges()
+		if not clean.is_empty() and not already_known(all, clean):
+			known.append(clean)
+			all.append(clean)
+			added += 1
+	if added == 0:
+		return
+	_write(root.path_join("learned.md"), "".join(Array(known).map(func(f: String) -> String: return "- %s\n" % f)))
+	changed.emit("Looked up %d new fact%s to tell you" % [added, "" if added == 1 else "s"])
+
+
+## The next of `fact_topics` not searched yet; the first again once all have been.
+func next_topic() -> String:
+	if fact_topics.is_empty():
+		return ""
+	var searched: PackedStringArray = parse_memories(FileAccess.get_file_as_string(root.path_join("searched.md")))
+	for topic: String in fact_topics:
+		if not topic in searched:
+			searched.append(topic)
+			_write(root.path_join("searched.md"), "".join(Array(searched).map(func(t: String) -> String: return "- %s\n" % t)))
+			return topic
+	_write(root.path_join("searched.md"), "- %s\n" % fact_topics[0])
+	return fact_topics[0]
+
+
+## The duck's answers in the personality's "How you sound" examples, which a small model will copy
+## word for word if let.
+func example_replies() -> PackedStringArray:
+	return example_replies_in(personality())
+
+
+func told() -> PackedStringArray:
+	return parse_memories(FileAccess.get_file_as_string(root.path_join("told.md")))
+
+
+func asked() -> PackedStringArray:
+	return parse_memories(FileAccess.get_file_as_string(root.path_join("asked.md")))
+
+
+## The facts not told yet; all of them again while every one has been told and new ones are
+## being looked up.
+func untold_facts() -> PackedStringArray:
+	var all: PackedStringArray = facts()
+	var done: PackedStringArray = told()
+	var left: PackedStringArray = PackedStringArray()
+	for fact: String in all:
+		if not fact in done:
+			left.append(fact)
+	return left if not left.is_empty() else all
+
+
+## Notes which facts a reply told and which questions it asked.
+func notice(reply: String) -> void:
+	var done: PackedStringArray = told()
+	var added: bool = false
+	for fact: String in facts():
+		if not fact in done and tells_fact(reply, fact):
+			done.append(fact)
+			added = true
+	if added:
+		_write(root.path_join("told.md"), "".join(Array(done).map(func(f: String) -> String: return "- %s\n" % f)))
+	# All told: look some more up, though not again for a while if the last search found nothing.
+	var now: int = Time.get_ticks_msec()
+	if Array(facts()).all(func(f: String) -> bool: return f in done) and (_fact_search_at < 0 or now - _fact_search_at > fact_search_wait * 1000.0):
+		var topic: String = next_topic()
+		if not topic.is_empty():
+			_fact_search_at = now
+			out_of_facts.emit(topic)
+	var questions: PackedStringArray = asked()
+	questions.append_array(questions_in(reply))
+	if questions.size() > max_asked:
+		questions = questions.slice(questions.size() - max_asked)
+	_write(root.path_join("asked.md"), "".join(Array(questions).map(func(q: String) -> String: return "- %s\n" % q)))
 
 
 ## Carries out plain requests in the user's own line before the model sees it: "your name is
@@ -264,6 +381,166 @@ static func about_the_user(text: String) -> String:
 	return out.left(1).to_upper() + out.substr(1)
 
 
+## The bullets under the "## Things you know for sure" heading, each joined onto one line.
+static func facts_in(text: String) -> PackedStringArray:
+	var found: PackedStringArray = PackedStringArray()
+	var inside: bool = false
+	for line: String in text.split("\n"):
+		if line.begins_with("## "):
+			inside = line.strip_edges() == "## Things you know for sure"
+			continue
+		if not inside:
+			continue
+		if line.begins_with("- "):
+			found.append(line.substr(2).strip_edges())
+		elif not line.strip_edges().is_empty() and not found.is_empty():
+			found[-1] = found[-1] + " " + line.strip_edges()
+	return found
+
+
+## The "You:" answers under the "## How you sound" heading, each joined onto one line.
+static func example_replies_in(text: String) -> PackedStringArray:
+	var found: PackedStringArray = PackedStringArray()
+	var inside: bool = false
+	var answering: bool = false
+	for line: String in text.split("\n"):
+		if line.begins_with("## "):
+			inside = line.strip_edges() == "## How you sound"
+			continue
+		if not inside:
+			continue
+		var said: String = line.strip_edges()
+		if said.begins_with("You:"):
+			found.append(said.trim_prefix("You:").strip_edges())
+			answering = true
+		elif said.begins_with("- ") or said.is_empty():
+			answering = false
+		elif answering:
+			found[-1] = found[-1] + " " + said
+	return found
+
+
+## The personality with its facts section holding only `facts`.
+static func with_facts(text: String, facts: PackedStringArray) -> String:
+	var out: PackedStringArray = PackedStringArray()
+	var inside: bool = false
+	for line: String in text.split("\n"):
+		if line.begins_with("## "):
+			inside = line.strip_edges() == "## Things you know for sure"
+			out.append(line)
+			if inside:
+				for fact: String in facts:
+					out.append("- " + fact)
+			continue
+		if not inside:
+			out.append(line)
+	return "\n".join(out)
+
+
+## Whether `reply` tells `fact`: three of the fact's telling words (four letters or more and not
+## ordinary, or numbers) turn up in it.
+static func tells_fact(reply: String, fact: String) -> bool:
+	var words: PackedStringArray = PackedStringArray()
+	for word: String in RegEx.create_from_string(r"[a-z0-9,]+").search_all(fact.to_lower()).map(func(m: RegExMatch) -> String: return m.get_string().trim_suffix(",")):
+		if (word.length() >= 4 or word.is_valid_int()) and not word in COMMON_WORDS and not word in words:
+			words.append(word)
+	if words.is_empty():
+		return false
+	var said: String = reply.to_lower()
+	var hits: int = 0
+	for word: String in words:
+		if word in said:
+			hits += 1
+	# Three telling words are enough: a fact retold in other words keeps its names and numbers.
+	return hits >= mini(3, words.size())
+
+
+## What in `reply` repeats something said before: the earlier reply it copies, or the question it
+## asks again; "" when it is new.
+static func repetition(reply: String, earlier_replies: PackedStringArray, earlier_questions: PackedStringArray) -> String:
+	for earlier: String in earlier_replies:
+		if overlap(reply, earlier) >= 0.6:
+			return earlier
+	for question: String in questions_in(reply):
+		for earlier: String in earlier_questions:
+			if overlap(question, earlier) >= 0.8:
+				return question
+	return ""
+
+
+## `reply` without the sentences said before, in `earlier_replies`, or asked before, in
+## `earlier_questions`; "" when nothing new is left.
+static func without_repeats(reply: String, earlier_replies: PackedStringArray, earlier_questions: PackedStringArray, min_words: int = 3, alike: float = 0.7) -> String:
+	var said: PackedStringArray = PackedStringArray()
+	for earlier: String in earlier_replies:
+		said.append_array(sentences_in(earlier))
+	var kept: PackedStringArray = PackedStringArray()
+	for sentence: String in sentences_in(reply):
+		var old: bool = false
+		for earlier: String in said:
+			if word_set(sentence).size() >= min_words and overlap(sentence, earlier) >= alike:
+				old = true
+		if sentence.ends_with("?"):
+			for earlier: String in earlier_questions:
+				if overlap(sentence, earlier) >= 0.8:
+					old = true
+		if not old:
+			kept.append(sentence)
+	return " ".join(kept)
+
+
+static func sentences_in(text: String) -> PackedStringArray:
+	var found: PackedStringArray = PackedStringArray()
+	for hit: RegExMatch in RegEx.create_from_string(SENTENCE + r"+[.!?]*").search_all(text):
+		var sentence: String = hit.get_string().strip_edges()
+		if not sentence.is_empty():
+			found.append(sentence)
+	return found
+
+
+## `reply` cut short where it got stuck saying one word over and over ("gack-gack-gack-..."), back
+## to the end of the last whole sentence before it.
+static func without_babble(reply: String) -> String:
+	var stuck: RegExMatch = RegEx.create_from_string(r"(?i)\b([\w']+)(?:[\s,-]+\1\b){4,}").search(reply)
+	if stuck == null:
+		return reply
+	var before: String = reply.left(stuck.get_start())
+	var end: int = maxi(maxi(before.rfind("."), before.rfind("!")), before.rfind("?"))
+	if end > 0:
+		return before.left(end + 1).strip_edges()
+	return before.left(maxi(before.rfind(" "), 0)).strip_edges() + "..."
+
+
+## How much of the shorter text's words, four letters or more, the other one has too, from 0 to 1.
+static func overlap(a: String, b: String) -> float:
+	var words_a: Dictionary = word_set(a)
+	var words_b: Dictionary = word_set(b)
+	if words_a.is_empty() or words_b.is_empty():
+		return 0.0
+	var shared: int = 0
+	for word: String in words_a:
+		if words_b.has(word):
+			shared += 1
+	return float(shared) / mini(words_a.size(), words_b.size())
+
+
+static func word_set(text: String) -> Dictionary:
+	var found: Dictionary = {}
+	for hit: RegExMatch in RegEx.create_from_string(r"[a-z0-9']{4,}").search_all(text.to_lower()):
+		found[hit.get_string()] = true
+	return found
+
+
+## The questions in a reply, each a sentence ending in "?".
+static func questions_in(reply: String) -> PackedStringArray:
+	var found: PackedStringArray = PackedStringArray()
+	for hit: RegExMatch in RegEx.create_from_string(SENTENCE + r"*\?").search_all(reply):
+		var question: String = hit.get_string().strip_edges()
+		if question.length() > 3:
+			found.append(question)
+	return found
+
+
 ## One line of the conversation log: "- 14:05:12 **You:** ..." or "- 14:05:13 **Duck:** ...".
 static func log_line(role: String, text: String, time: String) -> String:
 	return "- %s **%s:** %s\n" % [time, "You" if role == "user" else "Duck", text]
@@ -289,7 +566,9 @@ static func find_tags(reply: String) -> Array:
 
 
 static func strip_tags(reply: String) -> String:
-	return RegEx.create_from_string("\\s*" + TAG).sub(reply, "", true).strip_edges()
+	var stripped: String = RegEx.create_from_string("\\s*" + TAG).sub(reply, "", true)
+	# A tag left open runs to the end of the reply: the model forgot the "]".
+	return RegEx.create_from_string(r"(?i)\s*\[(remember|forget|name|skill):[^\]]*$").sub(stripped, "").strip_edges()
 
 
 static func strip_comments(text: String) -> String:

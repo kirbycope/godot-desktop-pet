@@ -25,24 +25,24 @@ func test_the_catalog_fixture_parses() -> void:
 	assert_eq(ModelPreferences.parse_catalog("not json", "models"), [])
 
 
-func test_this_pc_gets_the_7b_coder_and_parakeet() -> void:
+func test_this_pc_gets_the_7b_and_parakeet() -> void:
 	var chosen: Dictionary = Brain.choose(prefs, models, variants, budgets(12.0, 32.0), "en", "")
-	assert_eq(chosen["chat"], "qwen2.5-coder-7b", "12 GB card: 14b (9 GB) does not fit in 70% beside speech")
+	assert_eq(chosen["chat"], "qwen2.5-7b", "12 GB card: 14b (9 GB) does not fit in 70% beside speech")
 	assert_eq(chosen["speech"], "parakeet-tdt-0.6b-v2")
-	assert_string_contains(chosen["why"], "qwen2.5-coder-7b, 4.7 GB on the GPU")
+	assert_string_contains(chosen["why"], "qwen2.5-7b, 5.5 GB on the GPU")
 
 
 func test_a_bigger_card_gets_a_bigger_model() -> void:
-	assert_eq(Brain.choose(prefs, models, variants, budgets(24.0, 64.0), "en", "")["chat"], "qwen2.5-coder-14b")
+	assert_eq(Brain.choose(prefs, models, variants, budgets(24.0, 64.0), "en", "")["chat"], "qwen2.5-14b")
 
 
 func test_a_small_machine_gets_a_small_model() -> void:
-	assert_eq(Brain.choose(prefs, models, variants, budgets(4.0, 8.0), "en", "")["chat"], "qwen2.5-coder-1.5b")
+	assert_eq(Brain.choose(prefs, models, variants, budgets(4.0, 8.0), "en", "")["chat"], "qwen2.5-1.5b", "phi-4-mini (3.6 GB) does not fit")
 
 
-func test_a_new_family_is_taken_up_when_it_appears() -> void:
-	models.append({"alias": "qwen3-coder-8b", "type": "Chat", "device": "Gpu", "fileSizeMb": 5200})
-	assert_eq(Brain.choose(prefs, models, variants, budgets(12.0, 32.0), "en", "")["chat"], "qwen3-coder-8b", "qwen3-coder-* is listed above qwen2.5-coder-*")
+func test_the_coder_is_never_taken_over_a_general_model() -> void:
+	var chosen: String = Brain.choose(prefs, models, variants, budgets(12.0, 32.0), "en", "")["chat"]
+	assert_false(chosen.contains("coder"), "small talk with the coder repeats itself")
 
 
 func test_an_npu_build_is_judged_against_system_memory() -> void:
@@ -51,7 +51,7 @@ func test_an_npu_build_is_judged_against_system_memory() -> void:
 		{"alias": "qwen2.5-coder-1.5b", "type": "Chat", "device": "Npu", "fileSizeMb": 1300},
 		{"alias": "parakeet-tdt-0.6b-v2", "type": "Speech", "device": "Cpu", "fileSizeMb": 692},
 	]
-	assert_eq(Brain.choose(prefs, npu_models, [], budgets(0.0, 16.0), "en", "")["chat"], "qwen2.5-coder-7b", "16 GB laptop")
+	assert_eq(Brain.choose(prefs, npu_models, [], budgets(0.0, 16.0), "en", "")["chat"], "qwen2.5-coder-7b", "16 GB laptop, only coder builds for its NPU: the fallback")
 	assert_eq(Brain.choose(prefs, npu_models, [], budgets(0.0, 8.0), "en", "")["chat"], "qwen2.5-coder-1.5b", "8 GB laptop")
 
 

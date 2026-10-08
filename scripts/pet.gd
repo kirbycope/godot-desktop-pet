@@ -12,7 +12,16 @@ enum Edge { BOTTOM, RIGHT, TOP, LEFT }
 enum State { WALK, IDLE, DRAG, FALL, CHAT, SLEEP }
 
 @export var speed: float = 60.0
-@export var fall_speed: float = 700.0
+## Pixels a second squared pulling the duck down when it is dropped or thrown.
+@export var gravity: float = 2600.0
+## How much speed a bounce keeps, from 0 (thud) to 1 (superball).
+@export_range(0.0, 1.0) var bounciness: float = 0.55
+## How quickly sliding along the bottom slows it, per second.
+@export var floor_friction: float = 4.0
+## The fastest it can be thrown, in pixels a second.
+@export var max_throw_speed: float = 4500.0
+## A bounce faster than this squashes it and squeaks.
+@export var hard_bounce: float = 650.0
 ## Chance of stopping for a rest at a bottom corner, as in the original project.
 @export_range(0.0, 1.0) var idle_chance: float = 0.3
 ## Chance of climbing round a corner rather than turning back.
@@ -46,8 +55,15 @@ var screen_note: String = ""
 var _waking_seconds: int = 0
 var _drag_offset: Vector2 = Vector2.ZERO
 var _press_position: Vector2 = Vector2.ZERO
+## Where the mouse was over the last tenth of a second of a drag, [msec, position], for the throw.
+var _drag_trail: Array = []
+## The duck's speed in flight, in pixels a second, and how fast it spins.
+var velocity: Vector2 = Vector2.ZERO
+var _spin: float = 0.0
 ## A line waiting for the screen to be read, or for the brain to wake up.
 var _pending_line: String = ""
+## What a search asked for by the pending line found, as the model reads it.
+var _web_text: String = ""
 ## The last line sent, kept above the answer so you can see what the duck was asked.
 var _last_line: String = ""
 ## Said once the squeak has finished.
@@ -63,6 +79,7 @@ var _scroll_tween: Tween
 @onready var brain: Brain = $Brain
 @onready var voice: Voice = $Voice
 @onready var screen_reader: ScreenReader = $ScreenReader
+@onready var searcher: Searcher = $Searcher
 @onready var listener: Listener = $Listener
 @onready var squeak: AudioStreamPlayer = $Squeak
 @onready var bubble: Window = $Bubble
@@ -106,10 +123,15 @@ func _physics_process(delta: float) -> void:
 		State.WALK:
 			_walk(speed * delta)
 		State.DRAG:
-			screen_position = Vector2(DisplayServer.mouse_get_position()) - _drag_offset
+			var mouse: Vector2 = Vector2(DisplayServer.mouse_get_position())
+			screen_position = mouse - _drag_offset
 			_apply_position()
+			var now: int = Time.get_ticks_msec()
+			_drag_trail.append([now, mouse])
+			while _drag_trail.size() > 2 and now - int(_drag_trail[0][0]) > 100:
+				_drag_trail.pop_front()
 		State.FALL:
-			_fall(fall_speed * delta)
+			_fly(delta)
 
 
 ## The window lets the mouse through everywhere but the duck, so every button event that reaches it
@@ -129,9 +151,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		_press_position = Vector2(DisplayServer.mouse_get_position())
 		_drag_offset = _press_position - screen_position
+		_drag_trail.clear()
 		state = State.DRAG
 	elif not button.pressed and button.button_index == MOUSE_BUTTON_LEFT and state == State.DRAG:
-		state = State.CHAT if is_click(_press_position, Vector2(DisplayServer.mouse_get_position()), click_slop) else State.FALL
+		if is_click(_press_position, Vector2(DisplayServer.mouse_get_position()), click_slop):
+			state = State.CHAT
+		else:
+			# Let go mid-swing and it keeps the mouse's speed: a gentle drop or a proper yeet.
+			velocity = throw_velocity(_drag_trail, max_throw_speed)
+			_spin = velocity.x * 0.25
+			state = State.FALL
 
 
 func usable_area() -> Rect2:
@@ -160,14 +189,24 @@ func _walk(distance: float) -> void:
 	_play_for_edge()
 
 
-func _fall(distance: float) -> void:
-	var area: Rect2 = usable_area()
-	var floor_y: float = area.end.y - window_size().y
-	screen_position.x = clampf(screen_position.x, area.position.x, area.end.x - window_size().x)
-	screen_position.y = minf(screen_position.y + distance, floor_y)
+## One frame of flight: gravity, bounces off the screen's edges, sliding along the bottom, and
+## spinning as it goes. It lands once it has settled on the bottom.
+func _fly(delta: float) -> void:
+	var step: Dictionary = fly(screen_position, velocity, usable_area(), window_size(), delta, gravity, bounciness, floor_friction)
+	screen_position = step["position"]
+	velocity = step["velocity"]
 	_apply_position()
-	if screen_position.y >= floor_y:
+	_spin = lerpf(_spin, velocity.x * 0.25, 1.0 - exp(-3.0 * delta))
+	duck.roll = fmod(duck.roll + _spin * delta, 360.0)
+	if step["impact"] > hard_bounce:
+		duck.play(&"land")
+		squeak.play()
+	elif duck.animation == &"land" and not step["resting"]:
+		duck.play(&"fall")
+	if step["resting"]:
+		velocity = Vector2.ZERO
 		edge = Edge.BOTTOM
+		direction = 1 if randf() < 0.5 else -1
 		_stand_on(Edge.BOTTOM)
 		duck.play(&"land")
 		idle_timer.start(0.4)
@@ -276,7 +315,7 @@ func _update_stats() -> void:
 
 ## Reading the screen or waiting on an answer.
 func is_thinking() -> bool:
-	return brain.is_busy() or screen_reader.is_reading() or not _pending_line.is_empty()
+	return brain.is_busy() or screen_reader.is_reading() or searcher.is_searching() or not _pending_line.is_empty()
 
 
 ## The system's voices, then the natural Kokoro ones: greyed out with a download entry above them
@@ -520,10 +559,28 @@ func _send(line: String) -> void:
 	squeak.stop()
 	voice.stop()
 	listener.pause()
-	bubble_text.text = "You: %s\n\nLooking at your screen..." % line
 	duck.play(&"think")
-	_look()
+	_web_text = ""
+	# "Search for ...", "look up ...": the web first, then the screen as always.
+	var query: String = Searcher.query_in(line)
+	if not query.is_empty():
+		bubble_text.text = "You: %s\n\nSearching DuckDuckGo for %s..." % [line, query]
+		searcher.search(query)
+	else:
+		bubble_text.text = "You: %s\n\nLooking at your screen..." % line
+		_look()
 	_update_stats()
+
+
+func _on_searcher_searched(results: Array[Dictionary]) -> void:
+	var query: String = Searcher.query_in(_pending_line)
+	_web_text = Searcher.as_prompt(query, results)
+	if not results.is_empty():
+		_notes.append(Searcher.as_sources(results))
+	elif not searcher.last_error.is_empty():
+		_notes.append(searcher.last_error)
+	bubble_text.text = "You: %s\n\nLooking at your screen..." % _last_line
+	_look()
 
 
 func _look() -> void:
@@ -535,8 +592,9 @@ func _look() -> void:
 func _on_screen_reader_read_finished(text: String) -> void:
 	screen_note = screen_reader.last_error if not screen_reader.last_error.is_empty() else "%d characters read last time" % text.length()
 	bubble_text.text = "You: %s\n\n..." % _last_line
-	brain.ask(_pending_line, text)
+	brain.ask(_pending_line, text, _web_text)
 	_pending_line = ""
+	_web_text = ""
 	_update_stats()
 
 
@@ -671,6 +729,44 @@ static func around_corner(on_edge: Edge, toward: int) -> Array:
 		Edge.RIGHT:
 			return [Edge.BOTTOM if toward > 0 else Edge.TOP, -1]
 	return [Edge.BOTTOM if toward > 0 else Edge.TOP, 1]
+
+
+## The mouse's speed over a drag's last moments, from [msec, position] samples, capped at `cap`.
+static func throw_velocity(trail: Array, cap: float) -> Vector2:
+	if trail.size() < 2:
+		return Vector2.ZERO
+	var seconds: float = (int(trail[-1][0]) - int(trail[0][0])) / 1000.0
+	if seconds <= 0.0:
+		return Vector2.ZERO
+	return (((trail[-1][1] as Vector2) - (trail[0][1] as Vector2)) / seconds).limit_length(cap)
+
+
+## One step of flight inside `area` for a window of `size`: returns its new position and velocity,
+## how hard it hit anything this step (the speed lost into the bounce), and whether it has come to
+## rest on the bottom.
+static func fly(from: Vector2, speed: Vector2, area: Rect2, size: Vector2, delta: float, pull: float, bounce: float, friction: float) -> Dictionary:
+	var low: Vector2 = area.position
+	var high: Vector2 = area.end - size
+	var v: Vector2 = speed + Vector2(0.0, pull * delta)
+	var p: Vector2 = from + v * delta
+	var impact: float = 0.0
+	if p.x < low.x or p.x > high.x:
+		impact = maxf(impact, absf(v.x))
+		p.x = clampf(p.x, low.x, high.x)
+		v.x = -v.x * bounce
+	if p.y < low.y:
+		impact = maxf(impact, absf(v.y))
+		p.y = low.y
+		v.y = -v.y * bounce
+	var on_floor: bool = p.y >= high.y
+	if on_floor:
+		p.y = high.y
+		if v.y > 0.0:
+			impact = maxf(impact, v.y)
+			v.y = -v.y * bounce if v.y > 250.0 else 0.0
+		v.x *= exp(-friction * delta)
+	var resting: bool = on_floor and absf(v.y) < 1.0 and absf(v.x) < 40.0
+	return {"position": p, "velocity": v, "impact": impact, "resting": resting}
 
 
 ## Whether a press and release `slop` pixels apart or closer is a click rather than a drag.

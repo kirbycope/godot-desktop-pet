@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1")
-chat = PackedStringArray("qwen3-coder-*", "qwen2.5-coder-*", "phi-4-mini", "qwen2.5-*")
+chat = PackedStringArray("qwen2.5-14b", "qwen2.5-7b", "phi-4-mini", "qwen2.5-1.5b", "qwen2.5-0.5b", "qwen2.5-coder-*")
 speech_english = PackedStringArray("parakeet-tdt-*")
 speech_any_language = PackedStringArray("openai-whisper-small-generic-cpu", "openai-whisper-base-generic-cpu", "openai-whisper-tiny-generic-cpu")
 memory_share = 0.7

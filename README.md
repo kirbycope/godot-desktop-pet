@@ -34,7 +34,7 @@ desktop, speech, screen reading and the chat.
 The duck starts asleep: it settles low on the taskbar, breathing slowly, with Zs drifting up from
 it, while it looks at the hardware, starts the Foundry Local server on port 39839, downloads the
 model (once) and loads it. Click it then and the bubble shows the warm-up instead of a greeting,
-with what it is doing and for how long (`Waking up, 23 s: Loading qwen2.5-coder-7b`); there is
+with what it is doing and for how long (`Waking up, 23 s: Loading qwen2.5-7b`); there is
 nothing to type into, and the Send and microphone buttons are off, until it is ready. When it is,
 it wakes with a big stretch and a yawn and sets off; with the bubble open it says `I'm awake!`
 and greets you instead. The first load converts the model for the GPU and can take a minute or
@@ -45,7 +45,7 @@ more; later loads take seconds.
 | Left-click | squeaks (one of four rubber duck squeaks), then says one of its greetings aloud, shown in the bubble too; clicking again closes it |
 | Type in the orange box and press Enter, or Send | reads your screen, then answers in the bubble and out loud; Escape closes it. The box takes typing at any time; a line sent while the duck is still waking up is answered once it is ready |
 | Click the microphone | starts a spoken conversation: talk, pause, and the duck answers out loud, then listens again. Click it again to stop |
-| Drag | dangles from the cursor, then tumbles back to the bottom when let go |
+| Drag | dangles from the cursor; let go still moving and it keeps the mouse's speed, so it can be thrown: it spins, bounces off the screen's edges, squeaks on a hard hit and slides to a stop on the bottom |
 | Right-click | opens the menu, with Quit |
 
 The bubble has three tabs:
@@ -67,6 +67,10 @@ remembers, forgets the selected memory, and opens the folder.
 | `personality.md` | How it talks. Seeded on first run from `seed/personality.md`: bubbly and witty, in the spirit of Ernie from Sesame Street, whose best friend was a rubber duckie, with a few example lines, since a small model copies examples far better than it follows a description. Edit it freely; it is read afresh with every message and never overwritten |
 | `name.txt` | Its name, once you give it one |
 | `memories.md` | One remembered fact per `- ` line, all of them sent with every message |
+| `told.md` | The facts it has already told. They are left out of the prompt so it tells a new one each time |
+| `learned.md` | Facts it looked up on the web once it had told all of its own, one per `- ` line; edit or delete freely |
+| `searched.md` | The topics it has searched for facts, so each search is about something new |
+| `asked.md` | Its last 12 questions, sent with each message as ones not to ask again |
 | `conversations/<date>.md` | Everything said, a file a day, one `- 14:05:12 **You:** ...` or `**Duck:** ...` line each. The last three exchanges go back into the prompt when the duck starts again, so it picks up where you left off |
 | `skills/*.md` | Instructions with trigger words. When your message or the screen text mentions a trigger, that skill rides along with that one message, at most two at a time. Seeded with `rubber-duck-method`, `reading-errors` and `godot-gdscript` |
 
@@ -100,6 +104,23 @@ Pacific in 1992, ducks sleeping with one eye open, the mallard's structural gree
 "Rubber Duckie" reaching number 16 in 1970, and more. Anything else becomes a story about itself.
 Add facts there to give it more to talk about, but only true ones.
 
+It does not say the same thing twice. A fact it has told goes into `told.md` and is left out of
+the prompt, so the next one is new. Once every fact has been told, it looks more up: it searches
+DuckDuckGo for the next of the Mind's `fact_topics` ("surprising facts about ducks", "history of the
+rubber duck", "facts about ducklings" and so on), has the model copy out up to three facts the
+results state, leaving out tips and adverts, and keeps them in `learned.md` beside its own. The
+next answer notes it, for example `(Looked up 3 new facts to tell you)`. Until they arrive, and for
+five minutes after a search that found nothing, it goes round its old facts again. Facts from the
+web are only as good as the snippets they came from, so read `learned.md` now and then. The
+questions it asks go into `asked.md`, and the latest 12 are sent with each message as ones not to
+ask again. Small models copy their own last answer, and the personality's example answers, word for
+word, and asking nicely in the prompt does not stop them, so the brain checks each reply itself: one
+that mostly repeats any of its last three answers or an example, or asks a question it asked
+lately, is sent back once with what it repeated and a request for something new. If the second try
+repeats too, the repeated sentences are cut out, so a copy never reaches the history where it
+would be copied again. A reply that gets stuck on one word ("gack-gack-gack...") is cut back to its
+last whole sentence, and a line of its own instructions said back to you is dropped.
+
 A long answer starts from its top and scrolls down as the duck says it, reaching the bottom as it
 finishes.
 
@@ -112,6 +133,55 @@ steps]` when you teach it a way of doing something). Tags are stripped before th
 or spoken, a fact it already knows is not kept twice, and what changed is noted under the answer,
 for example `(Name: Quackers; Remembered: The user's game is called Duck Hunt Deluxe)`.
 
+
+## As a rubber duck
+
+When you are working on code it changes manner. A message counts as debugging when it talks about a
+bug ("crash", "error", "wrong", "stuck", "doesn't work", "fix", "code"...), holds code
+(`get_tree().paused`, `==`, braces), or points at the screen ("what's this?") while an error is on
+it; the message after one counts too, so explaining the bug keeps it there. Then the reminder at the
+end of your message asks for a rubber duck instead of a companion: no duck facts, stories or jokes,
+go through it step by step, name the line that looks wrong and why, and ask one short question that
+helps you check it, without lists or code blocks since it is read aloud. The repetition penalties
+are off for it too: code repeats its marks and names all the time, and with them on the model
+dropped backticks and `+` and stopped at "The line that looks wrong is:". The seeded skills
+(`rubber-duck-method`, `reading-errors`, `godot-gdscript`) still ride along when their words come up.
+
+How well it does, measured with four situations run three times each through the duck's own
+pipeline on `qwen2.5-7b` and `qwen2.5-coder-7b` (October 2026):
+
+| Situation | qwen2.5-7b | qwen2.5-coder-7b |
+| --- | --- | --- |
+| Python: `total = s` where `total += s` was meant | 3 of 3 | 3 of 3 |
+| Talked through, no screen: `get_tree().paused = true` never set back | 3 of 3 point at it | 3 of 3 point at it |
+| GDScript: `$Sprit` for a node called `Sprite`, null instance | 1 of 3 spot the typo; all say `sprite` is null | 0 of 3 spot the typo; all say it is null |
+| JavaScript: `fetch` without `await`, `res.json is not a function` | 0 of 3 | 0 of 3 |
+
+So it reads an error down to its line and catches plain logic slips, and when you describe what your
+code does it finds the step that matters, which is the rubber duck's real job. It misses subtler
+things, a typo in a node path or a missing `await`, and sometimes explains the error back to you
+rather than finding its cause. That is a 7B model on a laptop GPU; a card with 24 GB gets
+`qwen2.5-14b` by itself (see Which models it runs). Before the debugging reminder and with the
+penalties on, the same tests went about 2 in 4, with duck facts in the middle of a bug.
+
+## Searching the web
+
+Ask it to look something up and it searches DuckDuckGo first: "search for ...", "look up ...",
+"google ...", "can you search the web for ...", "Ducky, look up ...". The only other search is the
+one for new facts once it has told all it knows (see above), on a topic from its own list, never
+on anything you said. The top five results, titles, addresses and snippets, go to the model
+with your message as things it may tell you, and the first three are listed under the answer:
+
+```
+Searched DuckDuckGo:
+Godot 4.5, making dreams accessible - Godot Engine: https://godotengine.org/releases/4.5/
+```
+
+It needs no key or account: `scripts/searcher.gd` posts the query to DuckDuckGo's plain results
+page (`lite.duckduckgo.com`), as that page's own search box does, and reads the results out of the
+HTML. After a few searches in quick succession Lite asks whether it is talking to a robot (HTTP 202);
+the duck then tries `html.duckduckgo.com`, and if that asks too, it tells you to try again in a
+minute. Both addresses are `search_urls` on the Searcher node.
 
 ## Reading the screen
 
@@ -169,7 +239,7 @@ Foundry Local chooses. Asked for a model alias, it downloads the variant built f
 hardware it finds: a QNN build for a Snapdragon X NPU, Vitis AI for an AMD Ryzen AI NPU, OpenVINO
 for an Intel NPU, TensorRT-RTX or CUDA for an NVIDIA RTX GPU, WebGPU for other GPUs and Apple
 silicon, and the CPU otherwise. The variant's name ends in its device
-(`qwen2.5-coder-7b-instruct-trtrtx-gpu`), which is how the duck knows where it is thinking.
+(`qwen2.5-7b-instruct-trtrtx-gpu`), which is how the duck knows where it is thinking.
 
 ## Which models it runs
 
@@ -179,7 +249,7 @@ run here, and picks from the ranked lists in `resources/model_preferences.tres`:
 
 | List | Best first |
 | --- | --- |
-| `chat` | `qwen3-coder-*`, `qwen2.5-coder-*`, `phi-4-mini`, `qwen2.5-*` |
+| `chat` | `qwen2.5-14b`, `qwen2.5-7b`, `phi-4-mini`, `qwen2.5-1.5b`, `qwen2.5-0.5b`, then `qwen2.5-coder-*` |
 | `speech_english` | `parakeet-tdt-*` |
 | `speech_any_language` | `openai-whisper-small-generic-cpu`, then `base`, then `tiny` |
 
@@ -187,24 +257,30 @@ run here, and picks from the ranked lists in `resources/model_preferences.tres`:
   its build runs on, counting 1.2 times its download size for working memory: the card's own
   memory for an NVIDIA GPU or another Windows GPU with at least 2 GB, and system memory for an
   NPU, the CPU, an integrated GPU or a Mac. Speech is picked first and chat gets what is left. On
-  a 12 GB RTX 4080 Laptop that is `qwen2.5-coder-7b` and Parakeet; a 24 GB card gets
-  `qwen2.5-coder-14b`, an 8 GB laptop `qwen2.5-coder-1.5b`.
-- **It takes up new models by itself.** An entry with a `*` is a family, and the largest member
-  that fits wins. `qwen3-coder-*` heads the chat list although Foundry has no such model yet: the
-  day it publishes one, the duck uses it. Foundry also updates a model's build under the same
-  name. To prefer something else, reorder or add to the lists in the inspector; no code changes.
+  a 12 GB RTX 4080 Laptop that is `qwen2.5-7b` and Parakeet; a 24 GB card gets `qwen2.5-14b`, a
+  4 GB card `qwen2.5-1.5b`.
+- **Lists are easy to change.** An entry with a `*` is a family, and the largest member that fits
+  wins, so a new size is taken up as soon as Foundry publishes it; an entry without one is that
+  model alone. The general Qwen 2.5 sizes are named one by one because `qwen2.5-*` would match the
+  coder builds too. Foundry also updates a model's build under the same name. To prefer something
+  else, reorder or add to the lists in the inspector; no code changes.
 - **It speaks your language.** On an English system it listens with Parakeet; on any other it uses
   Whisper, on the CPU, because Foundry's CUDA Whisper builds return garbled text (CLI 0.10.3).
 - **Reasoning models are left out** (`deepseek-r1-*`, `phi-4-reasoning`): they think aloud
   before answering, which reads badly when spoken.
 
-Stats shows what was chosen and the budget, for example `Chat: qwen2.5-coder-7b, 4.7 GB on the GPU.
+Stats shows what was chosen and the budget, for example `Chat: qwen2.5-7b, 5.5 GB on the GPU.
 Speech: parakeet-tdt-0.6b-v2, 0.7 GB on the GPU. Budget: 8.4 GB on the GPU, 21.8 GB of system
 memory.` To force a chat model, set `model_alias` on the Brain node.
 
 The first chat model was `qwen2.5-1.5b`, which could not cope with screen text: asked to describe
-the screen it pasted the OCR back, and asked which file was open it made one up. The 7B coder
-model summarises what it read and says when it cannot tell, which is why coder models head the list.
+the screen it pasted the OCR back, and asked which file was open it made one up. `qwen2.5-coder-7b`
+read the screen well but could not chat: given nine turns of small talk it answered five of them
+with the same reply word for word, a copy of one of the personality's examples. `qwen2.5-7b`, the
+general model of the same size, told a different fact or story each turn, asked something new each
+time and used search results. `mistral-nemo-12b-instruct` fits too, but Foundry only builds it for
+CUDA, and on this RTX 4080 that build printed "the the the..." like the CUDA Whisper builds, so it is
+not on the list.
 
 ## TOPS
 
@@ -311,7 +387,8 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 
 | Node | Setting | Default |
 | --- | --- | --- |
-| `Pet` | `speed`, `fall_speed` | 60, 700 pixels a second |
+| `Pet` | `speed` | 60 pixels a second |
+| `Pet` | `gravity`, `bounciness`, `floor_friction`, `max_throw_speed`, `hard_bounce` | 2600 px/s², 0.55, 4, 4500 px/s, 650 px/s: how it flies when dropped or thrown |
 | `Pet` | `idle_chance`, `climb_chance` | 0.3 at a bottom corner, 0.5 at any corner |
 | `Pet` | `greetings` | ten canned greetings, one picked at random on each click |
 | `Pet` | `test_line` | what the Test button says |
@@ -324,6 +401,8 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Brain` | `max_tokens`, `max_history` | 160; 6 messages, the last three exchanges, sent with each prompt |
 | `Voice` | `volume`, `rate` | 70, 1.0 |
 | `ScreenReader` | `max_characters` | 6000 characters of screen text a message |
+| `Searcher`, `FactSearcher` | `max_results`, `max_snippet`, `search_urls` | 5 results, 300 characters each, Lite then HTML |
+| `Mind` | `fact_topics`, `fact_search_wait` | What it searches for new facts, in turn; 300 s before trying again after a search found none |
 | `Listener` | `language` | empty, so the system language |
 | `Listener` | `speech_threshold_db`, `pause_seconds` | -40 dB, 0.8 s |
 | `Squeak` | `stream` | the four squeaks, picked at random |
@@ -341,6 +420,7 @@ seed/                       the first personality and skills, copied to user://d
 scripts/model_preferences.gd  the ranked model lists and the memory budget
 resources/model_preferences.tres  the lists themselves, edited in the inspector
 scripts/screen_reader.gd    captures the screen and reads it with the system OCR
+scripts/searcher.gd         looks things up on DuckDuckGo when asked to
 scripts/voice.gd            speaks through the system's TTS voices or Kokoro's, and saves the chosen one
 scripts/kokoro.gd           downloads and runs the natural Kokoro voices
 tools/kokoro_server/        the program that keeps Kokoro's model loaded, and its build script

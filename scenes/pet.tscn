@@ -14,6 +14,7 @@
 [ext_resource type="Resource" path="res://resources/model_preferences.tres" id="12"]
 [ext_resource type="Script" path="res://scripts/mind.gd" id="13"]
 [ext_resource type="Script" path="res://scripts/kokoro.gd" id="14"]
+[ext_resource type="Script" path="res://scripts/searcher.gd" id="15"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bubble"]
 bg_color = Color(1, 1, 1, 0.97)
@@ -190,6 +191,9 @@ timeout = 10.0
 [node name="ChatRequest" type="HTTPRequest" parent="Brain"]
 timeout = 120.0
 
+[node name="FactRequest" type="HTTPRequest" parent="Brain"]
+timeout = 120.0
+
 [node name="Voice" type="Node" parent="."]
 script = ExtResource("4")
 
@@ -208,6 +212,20 @@ wait_time = 0.25
 
 [node name="ScreenReader" type="Node" parent="."]
 script = ExtResource("5")
+
+[node name="Searcher" type="Node" parent="."]
+script = ExtResource("15")
+
+[node name="Request" type="HTTPRequest" parent="Searcher"]
+timeout = 15.0
+max_redirects = 4
+
+[node name="FactSearcher" type="Node" parent="."]
+script = ExtResource("15")
+
+[node name="Request" type="HTTPRequest" parent="FactSearcher"]
+timeout = 15.0
+max_redirects = 4
 
 [node name="Squeak" type="AudioStreamPlayer" parent="."]
 stream = SubResource("AudioStreamRandomizer_squeak")
@@ -443,6 +461,13 @@ item_0/id = 0
 [connection signal="install_failed" from="Voice/Kokoro" to="." method="_on_kokoro_failed"]
 [connection signal="item_selected" from="Bubble/Panel/Margin/Tabs/Settings/Voices" to="." method="_on_voice_selected"]
 [connection signal="read_finished" from="ScreenReader" to="." method="_on_screen_reader_read_finished"]
+[connection signal="request_completed" from="Searcher/Request" to="Searcher" method="_on_request_completed"]
+[connection signal="searched" from="Searcher" to="." method="_on_searcher_searched"]
+[connection signal="out_of_facts" from="Mind" to="FactSearcher" method="search"]
+[connection signal="request_completed" from="FactSearcher/Request" to="FactSearcher" method="_on_request_completed"]
+[connection signal="searched" from="FactSearcher" to="Brain" method="learn_facts"]
+[connection signal="request_completed" from="Brain/FactRequest" to="Brain" method="_on_fact_request_completed"]
+[connection signal="facts_found" from="Brain" to="Mind" method="add_facts"]
 [connection signal="window_input" from="Bubble" to="." method="_on_bubble_window_input"]
 [connection signal="text_submitted" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Input" to="." method="_on_input_text_submitted"]
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Send" to="." method="_on_send_pressed"]

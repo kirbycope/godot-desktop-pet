@@ -10,9 +10,12 @@ extends Resource
 ## match a model alias (`qwen2.5-coder-7b`, using the build Foundry picks for this machine) or a
 ## build id (`openai-whisper-small-generic-cpu`, to insist on that one build).
 
-## Chat models for the conversation. Reasoning models are left out: they think aloud before
-## answering, which reads badly when spoken.
-@export var chat: PackedStringArray = ["qwen3-coder-*", "qwen2.5-coder-*", "phi-4-mini", "qwen2.5-*"]
+## Chat models for the conversation, general models first: the duck is a companion before it is a
+## debugger, and Qwen 2.5 Coder copies its own earlier answers and the personality's examples word
+## for word in small talk. They are named one by one because "qwen2.5-*" would match the coder too,
+## which stays last for a machine with no general build. Reasoning models are left out: they think
+## aloud before answering, which reads badly when spoken.
+@export var chat: PackedStringArray = ["qwen2.5-14b", "qwen2.5-7b", "phi-4-mini", "qwen2.5-1.5b", "qwen2.5-0.5b", "qwen2.5-coder-*"]
 ## Speech models when the system language is English.
 @export var speech_english: PackedStringArray = ["parakeet-tdt-*"]
 ## Speech models for any language, also the fallback for English. Foundry's CUDA Whisper builds

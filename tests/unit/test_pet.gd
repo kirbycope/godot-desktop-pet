@@ -289,3 +289,43 @@ func test_a_long_answer_scrolls_along_as_it_is_spoken() -> void:
 	var source: String = (load("res://scripts/pet.gd") as GDScript).source_code
 	assert_string_contains(source, "bubble_text.scroll_to_line(0)", "each answer starts from its top")
 	assert_string_contains(source, "_scroll_along(_spoken)", "and scrolls once the voice starts")
+
+
+const SCREEN: Rect2 = Rect2(0, 0, 1000, 600)
+const DUCK: Vector2 = Vector2(144, 144)
+
+
+func test_the_throw_takes_the_mouses_last_speed() -> void:
+	var trail: Array = [[1000, Vector2(100, 400)], [1050, Vector2(150, 380)], [1100, Vector2(300, 300)]]
+	assert_eq(Pet.throw_velocity(trail, 4500.0), Vector2(2000, -1000), "200 px right and 100 up in a tenth of a second")
+	assert_eq(Pet.throw_velocity([[1000, Vector2.ZERO]], 4500.0), Vector2.ZERO, "a drop, not a throw")
+	assert_almost_eq(Pet.throw_velocity([[0, Vector2.ZERO], [10, Vector2(1000, 0)]], 4500.0).length(), 4500.0, 0.1, "capped")
+
+
+func test_a_thrown_duck_bounces_off_the_walls_and_ceiling() -> void:
+	var wall: Dictionary = Pet.fly(Vector2(850, 200), Vector2(3000, 0), SCREEN, DUCK, 0.016, 2600.0, 0.55, 4.0)
+	assert_eq(wall["position"].x, 856.0, "stopped at the right edge")
+	assert_lt(wall["velocity"].x, 0.0, "and heading back left")
+	assert_gt(wall["impact"], 2000.0)
+	var ceiling: Dictionary = Pet.fly(Vector2(400, 5), Vector2(0, -2000), SCREEN, DUCK, 0.016, 2600.0, 0.55, 4.0)
+	assert_eq(ceiling["position"].y, 0.0)
+	assert_gt(ceiling["velocity"].y, 0.0, "back down")
+
+
+func test_it_bounces_lower_each_time_and_comes_to_rest() -> void:
+	var at: Vector2 = Vector2(400, 0)
+	var speed: Vector2 = Vector2(600, 0)
+	var bounces: int = 0
+	var rested: bool = false
+	for frame: int in 60 * 10:
+		var step: Dictionary = Pet.fly(at, speed, SCREEN, DUCK, 1.0 / 60.0, 2600.0, 0.55, 4.0)
+		if step["impact"] > 250.0:
+			bounces += 1
+		at = step["position"]
+		speed = step["velocity"]
+		if step["resting"]:
+			rested = true
+			break
+	assert_true(rested, "settles within ten seconds")
+	assert_gt(bounces, 1, "bounces more than once on the way")
+	assert_eq(at.y, 456.0, "on the bottom")
