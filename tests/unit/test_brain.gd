@@ -298,3 +298,10 @@ func test_a_sentence_leaning_on_a_dropped_one_goes_with_it() -> void:
 	assert_true(Brain.leans_on_the_last("So it never got a value."))
 	assert_false(Brain.leans_on_the_last("Rain is lovely."))
 	assert_false(Brain.leans_on_the_last("Thatcher was a prime minister."), "a whole word only")
+
+
+func test_an_answer_never_starts_on_but() -> void:
+	assert_eq(Brain.without_leading_conjunction("But did you know that ducks have webbed feet?"), "Did you know that ducks have webbed feet?")
+	assert_eq(Brain.without_leading_conjunction("And, honestly, I love ponds."), "Honestly, I love ponds.")
+	assert_eq(Brain.without_leading_conjunction("Butter is lovely."), "Butter is lovely.", "a whole word only")
+	assert_eq(Brain.without_leading_conjunction("Ponds are great."), "Ponds are great.")

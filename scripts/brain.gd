@@ -467,6 +467,9 @@ func _take_sentences(last: bool) -> void:
 		_handled += 1
 		if not kept.is_empty() and _dropped and leans_on_the_last(kept):
 			kept = ""
+		# With nothing kept before it, "But did you know..." starts mid-thought: the "But" goes.
+		if not kept.is_empty() and (_kept.is_empty() or _dropped):
+			kept = without_leading_conjunction(kept)
 		_dropped = kept.is_empty()
 		if kept.is_empty():
 			continue
@@ -613,6 +616,13 @@ static func keep_sentence(text: String, said: PackedStringArray, questions: Pack
 ## Whether a sentence only makes sense after the one before it: "That means...", "So...".
 static func leans_on_the_last(sentence: String) -> bool:
 	return RegEx.create_from_string(r"(?i)^(that|this|these|those|so|which|because|it|they|then|also)\b").search(sentence.strip_edges()) != null
+
+
+## `sentence` without a "But", "And", "Plus" and the like at its start, which only joins it to a
+## sentence that is not there.
+static func without_leading_conjunction(sentence: String) -> String:
+	var rest: String = RegEx.create_from_string(r"(?i)^(but|and|plus|still|though|anyway|also)\b,?\s+").sub(sentence.strip_edges(), "")
+	return rest.left(1).to_upper() + rest.substr(1) if not rest.is_empty() else sentence
 
 
 ## Lower case, letters and spaces only, for comparing what was said.
