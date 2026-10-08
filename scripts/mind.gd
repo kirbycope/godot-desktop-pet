@@ -57,13 +57,24 @@ func _ready() -> void:
 	ensure_seeded()
 
 
-## Copies the seed personality and skills into the folder, never over a file already there.
+## Copies the seed personality and skills into the folder, never over a file already there. A
+## seeded skill still exactly as an earlier version shipped it (kept in seed/previous) is brought up
+## to date, or removed if the seed no longer has it; one the user has edited is left alone.
 func ensure_seeded() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(root.path_join("skills")))
 	_copy_if_missing(seed.path_join("personality.md"), root.path_join("personality.md"))
+	for file: String in DirAccess.get_files_at(seed.path_join("previous")):
+		var mine: String = root.path_join("skills").path_join(file)
+		if FileAccess.file_exists(mine) and same_text(FileAccess.get_file_as_string(mine), FileAccess.get_file_as_string(seed.path_join("previous").path_join(file))):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(mine))
 	for file: String in DirAccess.get_files_at(seed.path_join("skills")):
 		if file.ends_with(".md"):
 			_copy_if_missing(seed.path_join("skills").path_join(file), root.path_join("skills").path_join(file))
+
+
+## Equal but for line endings, which git may have changed.
+static func same_text(a: String, b: String) -> bool:
+	return a.replace("\r", "").strip_edges() == b.replace("\r", "").strip_edges()
 
 
 func duck_name() -> String:
@@ -501,11 +512,18 @@ static func sentences_in(text: String) -> PackedStringArray:
 ## `reply` cut short where it got stuck saying one word over and over ("gack-gack-gack-..."), back
 ## to the end of the last whole sentence before it.
 static func without_babble(reply: String) -> String:
-	var stuck: RegExMatch = RegEx.create_from_string(r"(?i)\b([\w']+)(?:[\s,-]+\1\b){4,}").search(reply)
+	# One word over and over ("gack-gack-gack"), or a short run of words over and over ("4 * 2", "8",
+	# "4 * 2", "8", ...).
+	var word: RegExMatch = RegEx.create_from_string(r"(?i)\b([\w']+)(?:[\s,-]+\1\b){4,}").search(reply)
+	var phrase: RegExMatch = RegEx.create_from_string(r"((?:\S+[\s,]+){1,6}?)\1{3,}").search(reply)
+	var stuck: RegExMatch = word if phrase == null or (word != null and word.get_start() <= phrase.get_start()) else phrase
 	if stuck == null:
 		return reply
 	var before: String = reply.left(stuck.get_start())
-	var end: int = maxi(maxi(before.rfind("."), before.rfind("!")), before.rfind("?"))
+	# The end of the last whole sentence: a stop followed by a space, not the one in "console.log".
+	var end: int = -1
+	for hit: RegExMatch in RegEx.create_from_string(r"[.!?](?=\s)").search_all(before):
+		end = hit.get_start()
 	if end > 0:
 		return before.left(end + 1).strip_edges()
 	return before.left(maxi(before.rfind(" "), 0)).strip_edges() + "..."

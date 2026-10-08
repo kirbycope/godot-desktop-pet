@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://scripts/mind.gd" id="13"]
 [ext_resource type="Script" path="res://scripts/kokoro.gd" id="14"]
 [ext_resource type="Script" path="res://scripts/searcher.gd" id="15"]
+[ext_resource type="Script" path="res://scripts/chat_stream.gd" id="16"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bubble"]
 bg_color = Color(1, 1, 1, 0.97)
@@ -188,8 +189,8 @@ preferences = ExtResource("12")
 [node name="ModelsRequest" type="HTTPRequest" parent="Brain"]
 timeout = 10.0
 
-[node name="ChatRequest" type="HTTPRequest" parent="Brain"]
-timeout = 120.0
+[node name="ChatStream" type="Node" parent="Brain"]
+script = ExtResource("16")
 
 [node name="FactRequest" type="HTTPRequest" parent="Brain"]
 timeout = 120.0
@@ -448,7 +449,9 @@ item_0/id = 0
 [connection signal="status_changed" from="Brain" to="." method="_on_brain_status_changed"]
 [connection signal="replied" from="Brain" to="." method="_on_brain_replied"]
 [connection signal="request_completed" from="Brain/ModelsRequest" to="Brain" method="_on_models_request_completed"]
-[connection signal="request_completed" from="Brain/ChatRequest" to="Brain" method="_on_chat_request_completed"]
+[connection signal="delta" from="Brain/ChatStream" to="Brain" method="_on_chat_stream_delta"]
+[connection signal="finished" from="Brain/ChatStream" to="Brain" method="_on_chat_stream_finished"]
+[connection signal="sentence" from="Brain" to="." method="_on_brain_sentence"]
 [connection signal="finished" from="Voice" to="." method="_on_voice_finished"]
 [connection signal="started" from="Voice" to="." method="_on_voice_started"]
 [connection signal="started" from="Voice/Kokoro" to="Voice" method="_on_kokoro_started"]
@@ -470,6 +473,7 @@ item_0/id = 0
 [connection signal="facts_found" from="Brain" to="Mind" method="add_facts"]
 [connection signal="window_input" from="Bubble" to="." method="_on_bubble_window_input"]
 [connection signal="text_submitted" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Input" to="." method="_on_input_text_submitted"]
+[connection signal="text_changed" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Input" to="." method="_on_input_text_changed"]
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Send" to="." method="_on_send_pressed"]
 [connection signal="toggled" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Mic" to="." method="_on_mic_toggled"]
 [connection signal="finished" from="Squeak" to="." method="_on_squeak_finished"]

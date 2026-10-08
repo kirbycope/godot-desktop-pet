@@ -1,0 +1,93 @@
+Scene Project
+FileSystem
+res://
+addons
+assets
+audio
+•cons
+models
+resources
+scenes
+duck.tscn
+pet.tscn
+scripts
+brain.gd
+duck.gd
+hints.gd
+kokoro.gd
+mind.gd
+pet.gd
+seed
+tests
+fixtures
+unit
+tools
+README.md
+CREDITS.md
+Debug
+Editor
+Help
+class name Duck
+extends Node3D
+The rubber duck in 3D, posed in code: it waddles, hops, tilts, quacks and tumbles .
+It keeps the AnimatedSprite2D's little interface ( • play()'
+animation') so the pet drives it the
+same way it drove the 2D robot. roll' stands it on whichever screen edge it is on, and 'facing
+turns it left or right.
+Everything the pet asks for. The model 's own "Take 001" clip is not used.
+const ANIMATIONS: Array [StringName]
+&"climb", &"hang", &"idle", &"cheer" ,
+## How long one hop of cheer' takes: crouch, leap, land, settle.
+const HOP SECONDS: float = 0.9
+## The yaw that points the model 's face (its +X) at the camera.
+const VIEWER YAW: float = -9Ø.ø
+&"think" ,
+&"talk" ,
+&"land
+## Where the model's base sits: the bottom of the 0.34 m tall orthographic view, a hair above it.
+const BASE: Vector3 = Vector3(Ø.Ø, -0.168, 0.0)
+## Degrees the duck turns towards the camera, so it is seen three-quarters on rather than in profile.
+@export_range(Ø.Ø, 90.0) var turn_to_camera: float
+3Ø.ø
+## How quickly it turns, to look at you or to walk the other way; higher is quicker.
+@export var turn_speed: float
+1Ø.ø
+var animation: StringName = &"idle"
+## +1 faces right (the model 's +X),
+-1 faces left, both along the edge it stands on.
+var facing: int
+1
+## True while it is talking with you: it turns round to face the camera, and perks up as it does.
+var looking_at_viewer: bool = false:
+set(value) :
+if value and not looking_at_viewer:
+_perk_time = Ø.Ø
+looking_at_viewer = value
+## Degrees round the view axis: on the floor,
+90 on the right wall,
+180 on the ceiling,
+-90 on the left.
+var roll: float = 0.0:
+set(value) :
+roll = value
+if is_node_ready():
+pivot . rotation_degrees . z
+var time: float = Ø.Ø
+var _perk_time: float
+- INF
+roll
+@onready
+@onready
+@onready
+@onready
+var
+var
+var
+var
+pivot: Node3D = $Pivot
+body: Node3D = $Pivot/Body
+yaw: Node3D = $Pivot/Body/Yaw
+zzz: Array C Labe13D]
+C$zzz/Z1,
+$Zzz/Z2,
+$Zzz/Z3]

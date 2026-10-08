@@ -49,8 +49,11 @@ var _installing: bool = false
 var _steps: Array = []
 var _step: int = -1
 var _thread: Thread = Thread.new()
-var _line: int = 0
-var _synthesizing: bool = false
+## Sentences queued to say, in order: {index, done, stream}. `_batch` changes on stop, so a
+## sentence synthesised for an answer that was cut off is thrown away.
+var _pending: Array[Dictionary] = []
+var _queued: int = 0
+var _batch: int = 0
 var _server: Dictionary = {}
 var _server_lock: Mutex = Mutex.new()
 
@@ -196,32 +199,39 @@ func _fail(message: String) -> void:
 ## Says `text` in English voice `sid` (0 to 27), cutting off anything still being said.
 func speak(text: String, sid: int) -> void:
 	stop()
-	if not is_installed() or sid < 0 or sid >= VOICES.size():
+	add(text, sid)
+
+
+## Says `text` after whatever is queued already. Each sentence of a streamed answer comes this way:
+## it is synthesised at once, while the one before is still playing, and played in turn.
+func add(text: String, sid: int) -> void:
+	if not is_installed() or sid < 0 or sid >= VOICES.size() or text.strip_edges().is_empty():
 		return
-	_line += 1
-	_synthesizing = true
-	var wav: String = ProjectSettings.globalize_path(ROOT.path_join("say_%d.wav" % (_line % 3)))
+	var index: int = _queued
+	_queued += 1
+	var wav: String = ProjectSettings.globalize_path(ROOT.path_join("say_%d.wav" % (index % 8)))
+	_pending.append({"index": index, "done": false, "stream": null})
 	if _start_server():
-		WorkerThreadPool.add_task(_ask_server.bind(request(sid, text, wav), wav, _line))
+		WorkerThreadPool.add_task(_ask_server.bind(request(sid, text, wav), wav, _batch, index))
 	else:
 		var command: PackedStringArray = args(ProjectSettings.globalize_path(model_path()), sid, text, wav, threads)
-		WorkerThreadPool.add_task(_synthesize.bind(ProjectSettings.globalize_path(exe_path()), command, wav, _line))
+		WorkerThreadPool.add_task(_synthesize.bind(ProjectSettings.globalize_path(exe_path()), command, wav, _batch, index))
 
 
 ## Loads the model in the background ahead of the first line, so that line comes quickly.
 func warm_up(sid: int) -> void:
 	if is_installed() and _start_server():
 		var wav: String = ProjectSettings.globalize_path(ROOT.path_join("warm_up.wav"))
-		WorkerThreadPool.add_task(_ask_server.bind(request(sid, ".", wav), wav, -1))
+		WorkerThreadPool.add_task(_ask_server.bind(request(sid, ".", wav), wav, -1, -1))
 
 
-func _synthesize(exe: String, command: PackedStringArray, wav: String, line: int) -> void:
+func _synthesize(exe: String, command: PackedStringArray, wav: String, batch: int, index: int) -> void:
 	var code: int = OS.execute(exe, command)
-	_play.call_deferred(wav, line, code == 0)
+	_synthesized.call_deferred(wav, batch, index, code == 0)
 
 
 ## On a worker: one request to kokoro-server, one answer. The lock keeps requests in turn.
-func _ask_server(line_text: String, wav: String, line: int) -> void:
+func _ask_server(line_text: String, wav: String, batch: int, index: int) -> void:
 	_server_lock.lock()
 	var pipe: FileAccess = _server.get("stdio")
 	var answer: String = ""
@@ -230,8 +240,8 @@ func _ask_server(line_text: String, wav: String, line: int) -> void:
 		pipe.flush()
 		answer = pipe.get_line().strip_edges()
 	_server_lock.unlock()
-	if line >= 0:
-		_play.call_deferred(wav, line, answer == "ok")
+	if index >= 0:
+		_synthesized.call_deferred(wav, batch, index, answer == "ok")
 
 
 ## Starts kokoro-server if it is here and not yet running. False means use the command-line tool.
@@ -257,33 +267,47 @@ func _stop_server() -> void:
 	_server.clear()
 
 
-func _play(wav: String, line: int, ok: bool) -> void:
-	if line != _line:
+## A sentence is ready. It is read into memory now, so its file can be reused, and played when its
+## turn comes.
+func _synthesized(wav: String, batch: int, index: int, ok: bool) -> void:
+	if batch != _batch:
 		return
-	_synthesizing = false
-	var stream: AudioStreamWAV = AudioStreamWAV.load_from_file(wav) if ok else null
-	if stream == null:
+	for entry: Dictionary in _pending:
+		if entry["index"] == index:
+			entry["done"] = true
+			entry["stream"] = AudioStreamWAV.load_from_file(wav) if ok else null
+	_play_next()
+
+
+## Plays the next sentence if it is ready and nothing is playing; says `finished` when none are left.
+func _play_next() -> void:
+	if not is_node_ready() or speaker.playing:
+		return
+	while not _pending.is_empty() and _pending[0]["done"]:
+		var entry: Dictionary = _pending.pop_front()
+		if entry["stream"] != null:
+			speaker.stream = entry["stream"]
+			speaker.play()
+			started.emit()
+			return
+	if _pending.is_empty():
 		finished.emit()
-		return
-	speaker.stream = stream
-	speaker.play()
-	started.emit()
 
 
 func stop() -> void:
-	_line += 1
-	_synthesizing = false
+	_batch += 1
+	_pending.clear()
 	if is_node_ready() and speaker.playing:
 		speaker.stop()
 
 
 ## Synthesising or playing.
 func is_speaking() -> bool:
-	return _synthesizing or (is_node_ready() and speaker.playing)
+	return not _pending.is_empty() or (is_node_ready() and speaker.playing)
 
 
 func _on_speaker_finished() -> void:
-	finished.emit()
+	_play_next()
 
 
 ## The lexicon a voice reads with: British voices with the British one.

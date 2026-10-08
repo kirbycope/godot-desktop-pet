@@ -62,14 +62,21 @@ func system_voices() -> Array[Dictionary]:
 ## Says `text` in the chosen voice, or in `id` to try one out, cutting off anything still being said.
 func speak(text: String, id: String = voice_id) -> void:
 	stop()
+	add(text, id)
+
+
+## Says `text` after whatever is being said, as each sentence of a streamed answer arrives.
+## `finished` comes once, after the last.
+func add(text: String, id: String = voice_id) -> void:
 	if Kokoro.sid_of(id) >= 0:
 		if kokoro_ready():
-			kokoro.speak(text, Kokoro.sid_of(id))
+			kokoro.add(text, Kokoro.sid_of(id))
 		return
-	if id.is_empty() or not is_supported():
+	if id.is_empty() or not is_supported() or text.strip_edges().is_empty():
 		return
 	_utterance += 1
-	DisplayServer.tts_speak(text, id, volume, 1.0, rate, _utterance, true)
+	# Not interrupting: the system queues it behind the sentence before.
+	DisplayServer.tts_speak(text, id, volume, 1.0, rate, _utterance, false)
 	started.emit.call_deferred()
 
 

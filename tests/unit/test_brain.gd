@@ -175,3 +175,67 @@ func test_the_earlier_line_is_the_users_message_before_the_last() -> void:
 	var history: Array[Dictionary] = [{"role": "system", "content": "s"}, {"role": "user", "content": "first"}, {"role": "assistant", "content": "a"}, {"role": "user", "content": "second"}]
 	assert_eq(Brain.earlier_user_line(history), "first")
 	assert_eq(Brain.earlier_user_line(history.slice(0, 2)), "")
+
+
+func test_only_a_run_from_the_editor_keeps_the_model_loaded() -> void:
+	assert_true(Brain.keeps_model(true, true))
+	assert_false(Brain.keeps_model(true, false), "run on its own, it frees the memory")
+	assert_false(Brain.keeps_model(false, true), "unless told not to")
+
+
+func test_a_tag_is_never_shown_or_spoken_even_half_written() -> void:
+	assert_eq(Brain.speakable("Hello! [remember: user likes ducks] Bye."), "Hello! Bye.")
+	assert_eq(Brain.speakable("Hello! [remem"), "Hello! ", "held back until it closes")
+	assert_eq(Brain.speakable("Look at names[0] here."), "Look at names[0] here.", "a closed bracket is just text")
+
+
+func test_a_sentence_is_kept_unless_it_repeats_or_echoes_instructions() -> void:
+	var said: PackedStringArray = ["I love the sea, it looks enormous for a bath."]
+	assert_eq(Brain.keep_sentence("Pancakes are great.", said, PackedStringArray()), "Pancakes are great.")
+	assert_eq(Brain.keep_sentence("I love the sea, it looks enormous for a bath.", said, PackedStringArray()), "", "a repeat")
+	assert_eq(Brain.keep_sentence("Are you a beach person?", said, PackedStringArray(["Are you a beach person?"])), "", "a question asked lately")
+	assert_eq(Brain.keep_sentence("1.", said, PackedStringArray()), "", "no words")
+	assert_eq(Brain.keep_sentence("If they teach you a way of doing something to use again, end it with a skill tag.", said, PackedStringArray()), "", "its instructions")
+
+
+func test_debugging_gets_a_slim_prompt_without_the_personality() -> void:
+	var brain: Brain = Brain.new()
+	var slim: String = brain.system_prompt(true)
+	assert_false("Things you know for sure" in slim)
+	assert_string_contains(slim, "rubber duck for debugging")
+	assert_string_contains(slim, brain.sight_rules)
+	brain.free()
+
+
+func test_hints_and_the_reminder_wrap_the_users_line() -> void:
+	var history: Array[Dictionary] = [{"role": "system", "content": "s"}, {"role": "user", "content": "why?"}]
+	var content: String = Brain.with_screen(history, "code", Brain.DEBUG_REMINDER, PackedStringArray(["`$Sprit` appears only here"]))[-1]["content"]
+	assert_string_contains(content, "Things to check, from a quick look done in code")
+	assert_string_contains(content, "- `$Sprit` appears only here")
+	assert_gt(content.find("Things to check"), content.find("The user says: why?"), "after their line, near the end")
+	assert_string_ends_with(content, Brain.DEBUG_REMINDER)
+	assert_eq(Brain.user_lines(history), "why?")
+
+
+func test_the_server_starts_without_handing_its_daemon_our_stdout() -> void:
+	var windows: PackedStringArray = Brain.server_start_command("foundry", 39839, "Windows")
+	assert_eq(windows, PackedStringArray(["foundry", "server", "start", "--port", "39839", "--idle-timeout", "0"]))
+	var mac: PackedStringArray = Brain.server_start_command("/opt/homebrew/bin/foundry", 39839, "macOS")
+	assert_eq(mac, PackedStringArray(["/bin/sh", "-c", "exec '/opt/homebrew/bin/foundry' server start --port 39839 --idle-timeout 0 </dev/null >/dev/null 2>&1"]))
+	assert_string_contains(Brain.server_start_command("/a b/it's/foundry", 1, "macOS")[2], "'/a b/it'\\''s/foundry'", "a quote in the path is escaped")
+
+
+func test_starting_the_server_returns_while_its_daemon_runs_on() -> void:
+	# A stand-in for `foundry server start` on macOS: it leaves a child running that holds stdout.
+	if OS.get_name() == "Windows":
+		pass_test("Windows starts the server directly")
+		return
+	var fake: String = ProjectSettings.globalize_path("user://fake_foundry.sh")
+	var file: FileAccess = FileAccess.open(fake, FileAccess.WRITE)
+	file.store_string("#!/bin/sh\nsleep 20 &\nexit 0\n")
+	file.close()
+	FileAccess.set_unix_permissions(fake, FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER | FileAccess.UNIX_EXECUTE_OWNER)
+	var command: PackedStringArray = Brain.server_start_command(fake, 39839, OS.get_name())
+	var started: int = Time.get_ticks_msec()
+	assert_eq(OS.execute(command[0], command.slice(1)), 0)
+	assert_lt(Time.get_ticks_msec() - started, 5000, "OS.execute did not wait for the daemon")

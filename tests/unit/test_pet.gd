@@ -80,7 +80,7 @@ func test_scene_wires_its_signals_in_the_scene() -> void:
 	var methods: PackedStringArray = PackedStringArray()
 	for i: int in state.get_connection_count():
 		methods.append(state.get_connection_method(i))
-	for method: String in ["_on_mic_toggled", "_on_squeak_finished", "_on_listener_heard", "_on_brain_replied", "_on_input_text_submitted", "_on_chat_request_completed", "_on_voice_finished", "_on_test_pressed", "_on_apply_pressed", "_on_send_pressed", "_on_screen_reader_read_finished"]:
+	for method: String in ["_on_mic_toggled", "_on_squeak_finished", "_on_listener_heard", "_on_brain_replied", "_on_input_text_submitted", "_on_chat_stream_delta", "_on_chat_stream_finished", "_on_brain_sentence", "_on_voice_finished", "_on_test_pressed", "_on_apply_pressed", "_on_send_pressed", "_on_screen_reader_read_finished"]:
 		assert_has(methods, method)
 
 
@@ -329,3 +329,20 @@ func test_it_bounces_lower_each_time_and_comes_to_rest() -> void:
 	assert_true(rested, "settles within ten seconds")
 	assert_gt(bounces, 1, "bounces more than once on the way")
 	assert_eq(at.y, 456.0, "on the bottom")
+
+
+func test_stats_show_how_quick_the_last_answer_was() -> void:
+	assert_eq(Pet.timing_text({}, 400), "", "nothing until an answer has come")
+	assert_eq(Pet.timing_text({"first_token": 390, "first_sentence": 977, "reply": 1863, "finish_reason": "stop", "debugging": true}, 410), "screen 410 ms, first word 390 ms, first sentence 977 ms, whole 1.9 s (stop, debugging)")
+	assert_string_ends_with(Pet.stats_text("Ready", "", "", "none", "", "", "whole 1.9 s"), "Last answer: whole 1.9 s")
+
+
+func test_a_screen_read_ahead_is_used_only_while_fresh() -> void:
+	assert_true(Pet.is_fresh(1000, 3500, 3000))
+	assert_false(Pet.is_fresh(1000, 4500, 3000), "too old: read it again")
+	assert_false(Pet.is_fresh(-1, 10, 3000), "nothing read ahead")
+	var state: SceneState = (load("res://scenes/pet.tscn") as PackedScene).get_state()
+	var methods: PackedStringArray = PackedStringArray()
+	for i: int in state.get_connection_count():
+		methods.append(state.get_connection_method(i))
+	assert_has(methods, "_on_input_text_changed", "typing starts the read")

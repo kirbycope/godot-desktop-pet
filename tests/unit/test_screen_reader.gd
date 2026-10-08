@@ -38,3 +38,30 @@ func test_the_ocr_script_uses_the_built_in_engine() -> void:
 func test_the_ocr_script_turns_godot_paths_into_windows_paths() -> void:
 	# GetFileFromPathAsync fails on C:/Users/... with "One or more errors occurred".
 	assert_string_contains(ScreenReader.WINDOWS_OCR, "[System.IO.Path]::GetFullPath($Path)")
+
+
+func test_focus_puts_the_error_first_and_drops_a_file_tree() -> void:
+	var screen: String = "addons\nscenes\nscripts\ntests\nREADME.md\nfunc _ready() -> void:\n    sprite.modulate = Color.RED\nInvalid assignment on a base object of type 'null instance'.\nres://player.gd:5 - at function: _ready\nfunc _ready() -> void:"
+	var focused: String = ScreenReader.focus(screen, 6000)
+	assert_string_starts_with(focused, "Errors:\nInvalid assignment on a base object of type 'null instance'.\nres://player.gd:5 - at function: _ready\n\nThe rest of the screen:\nfunc _ready() -> void:")
+	assert_false("scenes" in focused, "a run of file names is noise")
+	assert_eq(focused.count("func _ready() -> void:"), 1, "a line seen before is dropped")
+	assert_eq(ScreenReader.focus("abcdefghij", 4), "abcd")
+
+
+func test_error_lines_are_errors_not_prose() -> void:
+	assert_eq(ScreenReader.error_lines("TypeError: res.json is not a function\nI think the error is here\nParse Error: yield was removed"), PackedStringArray(["TypeError: res.json is not a function", "Parse Error: yield was removed"]))
+	assert_lte(ScreenReader.error_lines(FileAccess.get_file_as_string("res://tests/fixtures/ocr_editor.txt")).size(), 1, "a real editor with no error shows next to none")
+
+
+func test_the_window_in_front_comes_as_four_numbers() -> void:
+	assert_eq(ScreenReader.parse_rect("-8 -8 1928 1160"), Rect2i(-8, -8, 1936, 1168), "a maximised window hangs over the edges")
+	assert_eq(ScreenReader.parse_rect("0 0 0 0"), Rect2i(), "none yet")
+	assert_eq(ScreenReader.parse_rect("error nope"), Rect2i())
+
+
+func test_the_picture_is_cut_to_the_window_in_front() -> void:
+	assert_eq(ScreenReader.crop_to(Vector2i(1920, 1200), Rect2i(-8, -8, 1936, 1168), Vector2i.ZERO), Rect2i(0, 0, 1920, 1160), "kept inside the screen")
+	assert_eq(ScreenReader.crop_to(Vector2i(1920, 1200), Rect2i(2000, 100, 800, 600), Vector2i(1920, 0)), Rect2i(80, 100, 800, 600), "on a second screen")
+	assert_eq(ScreenReader.crop_to(Vector2i(1920, 1200), Rect2i(100, 100, 200, 80), Vector2i.ZERO), Rect2i(), "too small to read alone: the whole screen")
+	assert_eq(ScreenReader.crop_to(Vector2i(1920, 1200), Rect2i(), Vector2i.ZERO), Rect2i(), "no window known")

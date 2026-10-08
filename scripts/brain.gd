@@ -7,6 +7,9 @@ extends Node
 ## runs the foundry CLI on a thread, since each step blocks until it is done.
 
 signal status_changed(text: String)
+## One sentence of the answer, as soon as the model has written it, already checked for repeats.
+signal sentence(text: String)
+## The whole answer, after the last sentence.
 signal replied(text: String)
 ## Facts pulled out of web search results by `learn_facts`.
 signal facts_found(facts: PackedStringArray)
@@ -20,12 +23,22 @@ signal facts_found(facts: PackedStringArray)
 @export var model_alias: String = ""
 @export var port: int = 39839
 @export var max_tokens: int = 160
+## While debugging: room to finish an explanation (they run 100 to 135 tokens; 160 cut them off),
+## and a low temperature, since the same bug was found one time in three at 0.8.
+@export var debug_max_tokens: int = 220
+@export var debug_temperature: float = 0.3
+## Leave the chat model loaded when the duck closes, if it was run from the Godot editor, so the
+## next run starts in a second instead of 45. Run any other way, it frees the memory as it closes.
+@export var keep_loaded_from_editor: bool = true
 ## Messages sent with each prompt besides the system prompt: the last three exchanges. Every
 ## exchange is also written to the duck's folder (see Mind.record), and the last ones come back on
 ## the next start.
 @export var max_history: int = 6
 ## The duck's job. How it talks, its name, memories and skills come from `mind`'s files.
 @export_multiline var role: String = "You are a friendly little rubber duck who lives on the edge of the user's screen and keeps them company. You are a companion first: chat happily about whatever they bring up, their day, ideas, jokes, questions, and follow the conversation, picking up on what was said before. Do not steer the talk towards code or offer coding help unasked. When they do bring you a coding problem, be a great rubber duck: help them think it through by asking one sharp question at a time, or by pointing at the part that looks wrong. Your answers are read aloud, so keep each turn to a few short sentences, with no code blocks or markdown."
+## Who the duck is while debugging, in place of the whole personality: a short prompt answers in
+## half the time and leaves nothing to tempt a duck fact into the middle of a bug.
+@export_multiline var debug_role: String = "You are a cheerful little rubber duck on the edge of the user's screen, and right now you are their rubber duck for debugging: sunny and encouraging, never mean, but no stories, duck facts or jokes while there is a bug to find. Help them find the bug by going through what the code does, one step at a time. Your answers are read aloud, so keep each turn to two or three short sentences, with no lists, headings or code blocks.\n\nA good turn, for the shape of it: they ask why their game crashes, and the screen shows `velocity = speed * direction` with the error \"Invalid operands 'Nil' and 'float'\". You say: The error is on the line that uses speed, and speed is Nil there, so it never got a value. Where do you set speed, and does that run before this line?"
 ## Told to the model with every message, so it never pretends to see more than the OCR gave it.
 @export_multiline var sight_rules: String = "Each message comes with text read from the user's screen by OCR, which may be jumbled or partial. Use it only when the user's message is about their screen, their code or an error; otherwise ignore it and just talk with them. You cannot see images, colours or layout, so never describe anything that is not in that text, and never repeat it back; pick out what matters, such as the file name, the code or the error. If they ask about the screen and no text was read, say you could not read it."
 
@@ -56,14 +69,28 @@ var _foundry: String = ""
 var _thread: Thread = Thread.new()
 ## Set when the duck is closing, so a wait for the model gives up at once.
 var _quitting: bool = false
-## The last request's messages, kept to send it back once when the reply repeats itself.
+## The last request's messages.
 var _sent: Array[Dictionary] = []
-var _retried: bool = false
-## Whether the last message was about code, so a retry asks for something new in the same vein.
+## Whether the last message was about code.
 var _debugging: bool = false
+## The answer being streamed: everything so far, how many of its sentences have been looked at,
+## the ones kept, and what they must not repeat.
+var _raw: String = ""
+var _handled: int = 0
+var _kept: PackedStringArray = PackedStringArray()
+var _said: PackedStringArray = PackedStringArray()
+var _questions: PackedStringArray = PackedStringArray()
+var _done: bool = true
+## How the last answer went, in milliseconds from the request: first_token, first_sentence, reply;
+## and tokens, finish_reason, debugging. Shown on the Stats tab.
+var timings: Dictionary = {}
+var _asked_at: int = 0
+## The error being worked on, kept while the conversation stays on it, so it is not lost when the
+## user switches windows to explain.
+var _thread_error: String = ""
 
 @onready var models_request: HTTPRequest = $ModelsRequest
-@onready var chat_request: HTTPRequest = $ChatRequest
+@onready var chat_stream: ChatStream = $ChatStream
 @onready var fact_request: HTTPRequest = $FactRequest
 
 
@@ -76,7 +103,7 @@ func _exit_tree() -> void:
 	if _thread.is_started():
 		_thread.wait_to_finish()
 	# Free the GPU or NPU memory; the Foundry daemon itself is shared and stays up.
-	if not model_id.is_empty():
+	if not model_id.is_empty() and not keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
 		OS.create_process(_foundry, ["model", "unload", chat_name])
 
 
@@ -100,7 +127,7 @@ func foundry_path() -> String:
 
 
 func is_busy() -> bool:
-	return chat_request.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED
+	return chat_stream.is_busy()
 
 
 ## Sends the user's line with the text read off the screen, and the web results when it asked for a
@@ -111,16 +138,40 @@ func ask(text: String, screen_text: String = "", web_text: String = "") -> void:
 		return
 	messages.append({"role": "user", "content": text})
 	messages = trimmed(messages, max_history)
-	# The system prompt is rebuilt each time, so edits to its files and new memories count at once.
-	messages[0] = {"role": "system", "content": system_prompt()}
-	var skills: Array[Dictionary] = mind.skills_for(text + "\n" + screen_text) if mind != null else ([] as Array[Dictionary])
-	# Debugging gets the rubber duck's reminder: no duck facts or jokes in the middle of a bug.
+	# Debugging gets the rubber duck: a slim prompt and its reminder, no duck facts or jokes.
 	_debugging = is_debugging(text, earlier_user_line(messages), screen_text)
+	# The system prompt is rebuilt each time, so edits to its files and new memories count at once.
+	messages[0] = {"role": "system", "content": system_prompt(_debugging)}
+	var skills: Array[Dictionary] = mind.skills_for(text + "\n" + screen_text) if mind != null else ([] as Array[Dictionary])
 	var reminder: String = DEBUG_REMINDER if _debugging else REMINDER
-	_sent = with_skills(with_web(with_screen(messages, screen_text, reminder), web_text), skills)
-	_retried = false
-	var body: String = JSON.stringify(chat_body(model_id, _sent, max_tokens, _debugging))
-	chat_request.request(_url("/v1/chat/completions"), ["Content-Type: application/json"], HTTPClient.METHOD_POST, body)
+	var hints: PackedStringArray = PackedStringArray()
+	if _debugging:
+		var errors: PackedStringArray = ScreenReader.error_lines(screen_text)
+		if not errors.is_empty():
+			_thread_error = "\n".join(errors).left(600)
+		elif not _thread_error.is_empty():
+			hints.append("They are still working on this error from before: " + _thread_error)
+		hints.append_array(Hints.for_text(screen_text, user_lines(messages)))
+	else:
+		_thread_error = ""
+	_sent = with_skills(with_web(with_screen(messages, screen_text, reminder, hints), web_text), skills)
+	# What the answer must not repeat: its last answers; in chat also the personality's example
+	# answers and its recent questions. While debugging "what did you expect?" is fair to ask twice.
+	_said = earlier_replies(messages, 3)
+	_questions = PackedStringArray()
+	if mind != null and not _debugging:
+		_said.append_array(mind.example_replies())
+		_questions = mind.asked()
+	_raw = ""
+	_handled = 0
+	_kept = PackedStringArray()
+	_done = false
+	_asked_at = Time.get_ticks_msec()
+	timings = {"debugging": _debugging}
+	var body: Dictionary = chat_body(model_id, _sent, debug_max_tokens if _debugging else max_tokens, _debugging)
+	if _debugging:
+		body["temperature"] = debug_temperature
+	chat_stream.start("127.0.0.1", port, "/v1/chat/completions", ChatStream.streamed(body))
 
 
 ## Has the model pick out the facts that web search results state plainly, so the duck has new
@@ -150,7 +201,7 @@ func _boot() -> void:
 		return
 	call_deferred("_set_status", "Starting Foundry Local...")
 	var output: Array = []
-	if OS.execute(_foundry, ["server", "start", "--port", str(port), "--idle-timeout", "0"], output, true) != 0:
+	if not _start_server(output):
 		call_deferred("_set_status", "Foundry Local failed:\n" + "".join(output).strip_edges().right(200))
 		return
 	call_deferred("_set_status", "Choosing models for this machine...")
@@ -172,6 +223,29 @@ func _boot() -> void:
 			call_deferred("_set_status", "Loading %s took over %d minutes. Try `foundry server restart`, then start me again." % [chosen["chat"], LOAD_TIMEOUT_SECONDS / 60])
 		return
 	call_deferred("_find_loaded_model")
+
+
+## On the thread: starts Foundry's server, putting what went wrong in `output` on failure.
+func _start_server(output: Array) -> bool:
+	var command: PackedStringArray = server_start_command(_foundry, port, OS.get_name())
+	if command[0] == _foundry:
+		return OS.execute(_foundry, command.slice(1), output, true) == 0
+	if OS.execute(command[0], command.slice(1)) == 0:
+		return true
+	OS.execute(_foundry, ["server", "status"], output, true)
+	return false
+
+
+## The command that starts the server, program first. OS.execute reads a child's stdout until it
+## closes, and on macOS and Linux the daemon `foundry server start` leaves running inherits that
+## stdout, so the read never ended and the duck stayed on "Starting Foundry Local..." for good
+## (CLI 0.10.3). There it goes through a shell that sends the output to /dev/null instead. The path
+## is quoted into the script, since Godot does not pass arguments after `sh -c`'s script on.
+static func server_start_command(foundry: String, server_port: int, os_name: String) -> PackedStringArray:
+	if os_name == "Windows":
+		return PackedStringArray([foundry, "server", "start", "--port", str(server_port), "--idle-timeout", "0"])
+	var quoted: String = "'" + foundry.replace("'", "'\\''") + "'"
+	return PackedStringArray(["/bin/sh", "-c", "exec %s server start --port %d --idle-timeout 0 </dev/null >/dev/null 2>&1" % [quoted, server_port]])
 
 
 ## On the thread: starts loading `model_name` and watches Foundry's list of loaded models for it,
@@ -234,51 +308,71 @@ func _on_models_request_completed(result: int, code: int, _headers: PackedString
 	_set_status("Ready, thinking on the %s." % device)
 
 
-func _on_chat_request_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
-	var reply: String = parse_reply(body.get_string_from_utf8()) if result == HTTPRequest.RESULT_SUCCESS and code == 200 else ""
-	if reply.is_empty():
+func _on_chat_stream_delta(piece: String) -> void:
+	if _done:
+		return
+	if not timings.has("first_token"):
+		timings["first_token"] = Time.get_ticks_msec() - _asked_at
+	_raw += piece
+	_take_sentences(false)
+
+
+func _on_chat_stream_finished(_text: String, code: int, finish_reason: String) -> void:
+	if _done:
+		return
+	timings["finish_reason"] = finish_reason
+	if code != 200 or _raw.strip_edges().is_empty():
+		_done = true
 		messages.pop_back()
 		replied.emit("Bzzt. My brain did not answer (HTTP %d)." % code)
 		return
-	# Small models copy their own last answer, or ask the same question again; the prompt alone does
-	# not stop it, so a repeat goes back once with what it repeated.
-	# A reply stuck on one word is cut back to its last whole sentence, and lines of these very
-	# instructions said back to the user are dropped.
-	reply = Mind.without_babble(reply)
-	reply = Mind.without_repeats(reply, PackedStringArray([Mind.PROTOCOL, REMINDER, DEBUG_REMINDER]), PackedStringArray(), 5, 0.8)
-	# The personality's example answers count as said already, since those get copied too.
-	var said: PackedStringArray = earlier_replies(messages, 3)
-	var questions: PackedStringArray = PackedStringArray()
-	# While debugging only a copied answer counts: "what did you expect to happen?" is fair to ask twice.
-	if mind != null and not _debugging:
-		said.append_array(mind.example_replies())
-		questions = mind.asked()
-	var repeated: String = Mind.repetition(Mind.strip_tags(reply), said, questions)
-	if not repeated.is_empty() and not _retried:
-		_retried = true
-		var again: Array[Dictionary] = _sent.duplicate(true)
-		again.append({"role": "assistant", "content": reply})
-		var instead: String = "look at another line or step, or ask a different question" if _debugging else "a different story, opinion or fact, and a different question, or none"
-		again.append({"role": "user", "content": "You said this before: \"%s\". Answer my last message again, saying something new: %s." % [repeated, instead]})
-		var retry: Dictionary = chat_body(model_id, again, max_tokens, _debugging)
-		retry["temperature"] = 1.0
-		chat_request.request(_url("/v1/chat/completions"), ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(retry))
-		return
-	# Still repeating after a second go: cut the repeats out, so a copy never reaches the history,
-	# where the model would copy it again.
-	if not repeated.is_empty():
-		reply = Mind.without_repeats(reply, said, questions)
-		if Mind.strip_tags(reply).strip_edges().is_empty():
-			reply = fresh_fallback(said)
-	# Remember, forget, rename or learn as the reply's tags ask, and keep them out of sight.
+	_take_sentences(true)
+	_finish()
+
+
+## Hands on each sentence of the answer that is complete. A sentence is complete once the next has
+## begun, or when the answer has ended (`last`). A reply stuck on one word ends there.
+func _take_sentences(last: bool) -> void:
+	var visible: String = speakable(_raw)
+	var unstuck: String = Mind.without_babble(visible)
+	var stuck: bool = unstuck != visible
+	var all: PackedStringArray = Mind.sentences_in(unstuck)
+	var complete: int = all.size() if last or stuck else all.size() - 1
+	while _handled < complete:
+		var kept: String = keep_sentence(all[_handled], _said, _questions)
+		_handled += 1
+		if kept.is_empty():
+			continue
+		_kept.append(kept)
+		if not timings.has("first_sentence"):
+			timings["first_sentence"] = Time.get_ticks_msec() - _asked_at
+		sentence.emit(kept)
+	if stuck and not last:
+		chat_stream.cancel()
+		timings["finish_reason"] = "stuck"
+		_finish()
+
+
+## The answer is in: carry out its tags, keep it, and say it is done.
+func _finish() -> void:
+	_done = true
 	var asked: String = String(messages[-1].get("content", "")) if not messages.is_empty() and messages[-1].get("role") == "user" else ""
-	var answer: String = mind.digest(reply, asked) if mind != null else Mind.strip_tags(reply)
+	# Remember, forget, rename or learn as the reply's tags ask; they were never shown or spoken.
+	if mind != null:
+		mind.digest(_raw, asked)
+	var answer: String = " ".join(_kept)
+	if answer.is_empty():
+		# Every sentence was a repeat: something short and fresh instead.
+		answer = fresh_fallback(_said)
+		sentence.emit(answer)
 	messages.append({"role": "assistant", "content": answer})
 	if mind != null:
 		mind.record("user", asked)
 		mind.record("assistant", answer)
 		mind.notice(answer)
-	replied.emit(answer if not answer.is_empty() else "Got it!")
+	timings["reply"] = Time.get_ticks_msec() - _asked_at
+	timings["tokens"] = _raw.length() / 4
+	replied.emit(answer)
 
 
 func _set_status(text: String) -> void:
@@ -344,9 +438,38 @@ static func describe_choice(model: Dictionary, none: String) -> String:
 	return "%s, %.1f GB on the %s" % [model["name"], float(model["fileSizeMb"]) / 1024.0, String(model.get("device", "cpu")).to_upper()]
 
 
-func system_prompt() -> String:
+func system_prompt(debugging: bool = false) -> String:
+	if debugging:
+		var called: String = mind.duck_name() if mind != null else ""
+		return "%s%s\n\n%s" % ["Your name is %s. " % called if not called.is_empty() else "", debug_role, sight_rules]
 	# Who it is comes first: small models follow the opening of a prompt and its end most closely.
 	return "%s\n\n%s\n\n%s\n\nYou run entirely on this computer, on its %s.\n%s" % [mind.prompt() if mind != null else "", role, sight_rules, device, hardware]
+
+
+## Whether to leave the model loaded on closing: only when run from the editor, whose debugger is
+## attached to the running duck, and only if `keep_loaded_from_editor` allows it.
+static func keeps_model(allowed: bool, from_editor: bool) -> bool:
+	return allowed and from_editor
+
+
+## The answer as far as it can be shown and spoken: tags taken out, and anything from a "[" that has
+## not closed yet held back, in case it is the start of one.
+static func speakable(raw: String) -> String:
+	var text: String = Mind.strip_tags(raw)
+	var open: int = text.rfind("[")
+	if open >= 0 and text.find("]", open) < 0:
+		text = text.left(open)
+	return text
+
+
+## `text` if it may be said: "" when it repeats lines of the duck's own instructions, an earlier
+## answer, or a question asked lately, or has no words at all ("1.").
+static func keep_sentence(text: String, said: PackedStringArray, questions: PackedStringArray) -> String:
+	if RegEx.create_from_string(r"[A-Za-z]").search(text) == null:
+		return ""
+	if Mind.without_repeats(text, PackedStringArray([Mind.PROTOCOL, REMINDER, DEBUG_REMINDER]), PackedStringArray(), 5, 0.8).is_empty():
+		return ""
+	return Mind.without_repeats(text, said, questions)
 
 
 ## The history with the instructions of `skills` added to the user's last message.
@@ -362,14 +485,27 @@ static func with_skills(history: Array[Dictionary], skills: Array[Dictionary]) -
 
 
 ## The history with its last message, the user's, wrapped in the screen text read for it.
-static func with_screen(history: Array[Dictionary], screen_text: String, reminder: String = REMINDER) -> Array[Dictionary]:
+static func with_screen(history: Array[Dictionary], screen_text: String, reminder: String = REMINDER, hints: PackedStringArray = PackedStringArray()) -> Array[Dictionary]:
 	var sent: Array[Dictionary] = history.duplicate(true)
 	if sent.is_empty() or sent[-1].get("role") != "user":
 		return sent
 	var seen: String = screen_text.strip_edges()
 	var screen: String = "Text read from the user's screen by OCR:\n<<<\n%s\n>>>" % seen if not seen.is_empty() else "No text could be read from the user's screen."
-	sent[-1]["content"] = "%s\n\nThe user says: %s\n\n%s" % [screen, sent[-1]["content"], reminder]
+	# The hints go after the user's line, near the end, where a small model heeds them.
+	var checks: String = ""
+	if not hints.is_empty():
+		checks = "Things to check, from a quick look done in code. They may be wrong: check each against the code before you mention it.\n- %s\n\n" % "\n- ".join(hints)
+	sent[-1]["content"] = "%s\n\nThe user says: %s\n\n%s%s" % [screen, sent[-1]["content"], checks, reminder]
 	return sent
+
+
+## Everything the user has said in `history`, one message a line.
+static func user_lines(history: Array[Dictionary]) -> String:
+	var lines: PackedStringArray = PackedStringArray()
+	for message: Dictionary in history:
+		if message.get("role") == "user":
+			lines.append(String(message.get("content", "")))
+	return "\n".join(lines)
 
 
 ## Whether the user is working on code: their line talks about a bug or holds code, or points at

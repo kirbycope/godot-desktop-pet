@@ -72,16 +72,17 @@ remembers, forgets the selected memory, and opens the folder.
 | `searched.md` | The topics it has searched for facts, so each search is about something new |
 | `asked.md` | Its last 12 questions, sent with each message as ones not to ask again |
 | `conversations/<date>.md` | Everything said, a file a day, one `- 14:05:12 **You:** ...` or `**Duck:** ...` line each. The last three exchanges go back into the prompt when the duck starts again, so it picks up where you left off |
-| `skills/*.md` | Instructions with trigger words. When your message or the screen text mentions a trigger, that skill rides along with that one message, at most two at a time. Seeded with `rubber-duck-method`, `reading-errors` and `godot-gdscript` |
+| `skills/*.md` | Instructions with trigger words. When your message or the screen text mentions a trigger, that skill rides along with that one message, at most two at a time. Seeded with `godot-gdscript`, `python` and `javascript`, each a short list of the usual causes of bugs in that language. A seeded skill you have not edited is brought up to date when a newer one ships (the versions it replaces are kept in `seed/previous/`); one you have edited is left alone |
 
 A skill file is a short header and the instructions:
 
 ```markdown
 ---
-name: reading-errors
-triggers: error, exception, traceback, crash
+name: python
+triggers: python, def, traceback, indexerror, keyerror
 ---
-Find the first error line and the file and line it points at...
+Usual causes in Python, worth checking against the code:
+- A loop or index one past the end: `range(len(x) + 1)`...
 ```
 
 It is a companion first. It chats about whatever you bring up and follows the conversation:
@@ -114,15 +115,24 @@ five minutes after a search that found nothing, it goes round its old facts agai
 web are only as good as the snippets they came from, so read `learned.md` now and then. The
 questions it asks go into `asked.md`, and the latest 12 are sent with each message as ones not to
 ask again. Small models copy their own last answer, and the personality's example answers, word for
-word, and asking nicely in the prompt does not stop them, so the brain checks each reply itself: one
-that mostly repeats any of its last three answers or an example, or asks a question it asked
-lately, is sent back once with what it repeated and a request for something new. If the second try
-repeats too, the repeated sentences are cut out, so a copy never reaches the history where it
-would be copied again. A reply that gets stuck on one word ("gack-gack-gack...") is cut back to its
-last whole sentence, and a line of its own instructions said back to you is dropped.
+word, and asking nicely in the prompt does not stop them, so the brain checks every sentence itself
+as it arrives: one that mostly repeats one of its last three answers or an example, or asks a
+question it asked lately, is dropped before it is shown or spoken, so a copy never reaches the
+history where it would be copied again. If every sentence was a repeat it says something short and
+fresh instead ("Hmm, my head's full of bubbles. Go on, I'm listening!"). While you are debugging
+only a copied answer counts: "what did you expect to happen?" is fair to ask twice. A reply that
+gets stuck on a word or a phrase ("gack-gack-gack...", `"4 * 2", "8", "4 * 2", "8"...`) is cut back
+to its last whole sentence, and a line of its own instructions said back to you is dropped.
 
-A long answer starts from its top and scrolls down as the duck says it, reaching the bottom as it
-finishes.
+The answer streams. Foundry sends it a few words at a time, and each sentence appears in the bubble
+and is spoken as soon as it is complete, while the model is still writing the next; Kokoro
+synthesises each sentence as it arrives and plays them in turn, so the next is ready when the one
+before ends. A hidden tag is held back from its `[` until it closes, so it is never shown or said.
+The first words are heard about a second after Send rather than after the whole reply. The Stats
+tab gives the last answer's timings, for example `Last answer: screen 0 ms, first word 388 ms,
+first sentence 747 ms, whole 1.6 s (stop, debugging)`; "length" in place of "stop" means it ran out
+of tokens. A long answer starts from its top and scrolls down as the duck says it, reaching the
+bottom as it finishes.
 
 Plain requests are carried out by the duck itself before the model sees them, so they always work:
 "your name is Quackers", "call yourself ...", "remember that ...", "don't forget ...", "forget
@@ -139,30 +149,65 @@ for example `(Name: Quackers; Remembered: The user's game is called Duck Hunt De
 When you are working on code it changes manner. A message counts as debugging when it talks about a
 bug ("crash", "error", "wrong", "stuck", "doesn't work", "fix", "code"...), holds code
 (`get_tree().paused`, `==`, braces), or points at the screen ("what's this?") while an error is on
-it; the message after one counts too, so explaining the bug keeps it there. Then the reminder at the
-end of your message asks for a rubber duck instead of a companion: no duck facts, stories or jokes,
-go through it step by step, name the line that looks wrong and why, and ask one short question that
-helps you check it, without lists or code blocks since it is read aloud. The repetition penalties
-are off for it too: code repeats its marks and names all the time, and with them on the model
-dropped backticks and `+` and stopped at "The line that looks wrong is:". The seeded skills
-(`rubber-duck-method`, `reading-errors`, `godot-gdscript`) still ride along when their words come up.
+it; the message after one counts too, so explaining the bug keeps it there. Then:
 
-How well it does, measured with four situations run three times each through the duck's own
-pipeline on `qwen2.5-7b` and `qwen2.5-coder-7b` (October 2026):
+- **A slim prompt.** In place of the whole personality (2400 tokens with its facts, examples and
+  memories) the model gets `debug_role`, a few lines on being a cheerful rubber duck with no
+  stories, facts or jokes while there is a bug to find, with one example of a good turn, and
+  `sight_rules`: about 900 tokens. The first word comes twice as fast, and nothing tempts a duck
+  fact into the middle of a bug.
+- **The screen text with the error first.** The OCR is put in order before it is sent: error lines
+  at the top under "Errors:", then the rest, without repeated lines or runs of file names and menu
+  entries (`ScreenReader.focus`). The 6000-character cap then cuts noise rather than the error. If
+  you switch windows to explain and the new screen shows no error, the last one goes along as
+  "they are still working on this error from before".
+- **Checks done in code** (`scripts/hints.gd`). Some slips a 7B model reads straight past, so the
+  duck looks for them itself and sends what it finds as "Things to check", which the model is told
+  to check against the code before it says so: a `$Node` path or a property whose name turns up
+  nowhere else on screen while a name a letter or two away does (`$Sprit` beside `Sprite`, `prise`
+  beside `price`); `fetch(...)` without `await`; Godot 3 syntax (`yield`, `onready var`, `export
+  var`, `connect("signal", self, ...)`, `.instance()`); `range(len(x) + 1)`; something you said
+  you set to true that nothing sets back to false; and the file and line a traceback or the
+  debugger points at. Each fires only where it is right nearly every time, and a test runs them
+  over real OCR of an editor with nothing wrong in it, where they must stay quiet.
+- **The rubber duck's reminder** at the end of your message, where a small model heeds most: go
+  through it step by step, name the line that looks wrong and why, then ask one short question that
+  helps you check it; no lists or code blocks, since it is read aloud.
+- **Settings for code:** `debug_max_tokens` 220 (explanations run 100 to 135 tokens and 160 cut
+  some off), `debug_temperature` 0.3, and no repetition penalties: code repeats its marks and names
+  all the time, and with them on the model dropped backticks and `+` and stopped at "The line that
+  looks wrong is:".
 
-| Situation | qwen2.5-7b | qwen2.5-coder-7b |
+`tools/debug_bench.gd` measures it: eight situations, three rounds each, through the duck's own
+pipeline in a scratch mind folder, scored by whether the answer names the actual cause, with the
+timings of every turn. On the RTX 4080 Laptop with `qwen2.5-7b` (October 2026), the last commit
+before this work and this one, two runs each with the same scoring:
+
+| Situation | Before | After |
 | --- | --- | --- |
-| Python: `total = s` where `total += s` was meant | 3 of 3 | 3 of 3 |
-| Talked through, no screen: `get_tree().paused = true` never set back | 3 of 3 point at it | 3 of 3 point at it |
-| GDScript: `$Sprit` for a node called `Sprite`, null instance | 1 of 3 spot the typo; all say `sprite` is null | 0 of 3 spot the typo; all say it is null |
-| JavaScript: `fetch` without `await`, `res.json is not a function` | 0 of 3 | 0 of 3 |
+| GDScript: `$Sprit` for a node called `Sprite`, null instance | 3, 1 | 3, 3 |
+| Python: `total = s` where `total += s` was meant | 3, 3 | 3, 3 |
+| JavaScript: `fetch` without `await`, `res.json is not a function` | 0, 0 | 3, 3 |
+| Talked through, no screen: `get_tree().paused = true` never set back | 1, 0 | 3, 3 |
+| GDScript: a signal sends an argument the method does not take | 3, 3 | 3, 3 |
+| GDScript: Godot 3 syntax, `onready var` and `yield` | 0, 0 | 3, 2 |
+| Python: `range(len(names) + 1)`, `IndexError` | 3, 2 | 3, 3 |
+| JavaScript: `item.prise` for `price`, `NaN` | 1, 1 | 2, 2 |
+| Total of 24 | 14, 10 | 23, 22 |
+| First word heard | after the whole reply, 2.4 to 2.8 s, and its synthesis | first sentence written in 0.75 s |
 
-So it reads an error down to its line and catches plain logic slips, and when you describe what your
-code does it finds the step that matters, which is the rubber duck's real job. It misses subtler
-things, a typo in a node path or a missing `await`, and sometimes explains the error back to you
-rather than finding its cause. That is a 7B model on a laptop GPU; a card with 24 GB gets
-`qwen2.5-14b` by itself (see Which models it runs). Before the debugging reminder and with the
-penalties on, the same tests went about 2 in 4, with duck facts in the middle of a bug.
+`qwen2.5-coder-7b` scored 17 of 24 on the same bench, so the general model stays. A hidden
+`[thinking: ...]` step before the answer scored 19: the model wrote "Thinking:" without the
+bracket, and its thinking took the answer's place, so it was taken out again. The checks were
+written with these situations in view, which is why the bench also has cases they do not touch
+(the signal and the `IndexError` ones), and why the duck is told to check them rather than repeat
+them. Run it with:
+
+```powershell
+& 'C:\Godot\godot.exe' --headless --path . -s res://tools/debug_bench.gd
+```
+
+`DUCK_MODEL=<alias>` tries another model.
 
 ## Searching the web
 
@@ -185,11 +230,16 @@ minute. Both addresses are `search_urls` on the Searcher node.
 
 ## Reading the screen
 
-Each time you send a message the duck captures the screen it is on, blanks out its own window and
+The duck reads the screen it is on: it captures it, cuts it down to the window you were last
+working in (not its own bubble, which has the focus while you type), blanks out its own window and
 bubble so it does not read itself, and runs the picture through the OCR built into Windows 10 and
-later (`Windows.Media.Ocr`, through PowerShell; nothing to install). The text, up to
-`max_characters`, goes to the model with your message, and only your message is kept in the
-conversation, so old screens do not pile up. Reading takes about half a second.
+later (`Windows.Media.Ocr`; nothing to install). The OCR runs in one PowerShell process started with
+the duck and kept running, which also notes the window in front four times a second, so neither
+PowerShell nor the OCR engine starts up for each read: a read takes about 0.2 s, down from 0.4. It
+reads as you start typing (the first letter) or as the mic hears you, and Send uses that reading if
+it is under `read_ahead_ms` (3 s) old, so Send does not wait on OCR at all. The text, error lines
+first and noise dropped (see As a rubber duck), up to `max_characters`, goes to the model with your
+message, and only your message is kept in the conversation, so old screens do not pile up.
 
 The model is told plainly that this text is all it can see, and to use it only when your message
 is about the screen, your code or an error; otherwise it ignores it and just talks. It cannot see
@@ -200,8 +250,9 @@ best.
 Screen reading is Windows only for now. On other systems the duck is told it could not read the
 screen and says so.
 
-The capture and the text are written to `user://screen.png` and `user://screen.txt`, overwritten
-each time and never sent anywhere.
+The captures and the text are written to `user://screen_0.png` to `screen_2.png` (in turn, since
+the OCR process can keep the last one open a moment) and `user://screen.txt`, overwritten each time
+and never sent anywhere.
 
 ## Talking to it
 
@@ -211,7 +262,7 @@ you...`, `Writing it down...`, `Thinking...`, `Talking...`), with a level meter 
 hears you. The box comes back when the microphone is turned off.
 
 The microphone button turns on a conversation. The duck listens; when you talk it records, and
-when you have been quiet for `pause_seconds` (0.8 s) it writes down what you said and sends it,
+when you have been quiet for `pause_seconds` (0.6 s) it writes down what you said and sends it,
 with a look at the screen, exactly as if you had typed it. What it heard appears in the bubble as
 `You: ...` above the answer. While it thinks and talks it stops listening, so it does not hear
 itself, and it starts listening again as soon as it has finished speaking. Click the microphone
@@ -268,6 +319,12 @@ run here, and picks from the ranked lists in `resources/model_preferences.tres`:
   Whisper, on the CPU, because Foundry's CUDA Whisper builds return garbled text (CLI 0.10.3).
 - **Reasoning models are left out** (`deepseek-r1-*`, `phi-4-reasoning`): they think aloud
   before answering, which reads badly when spoken.
+
+Loading a model takes 40 to 50 s, so when the duck was started from the Godot editor it leaves the
+chat model loaded as it closes, and the next run is up in a second or two
+(`keep_loaded_from_editor` on the Brain; it knows by the editor's debugger being attached). Started
+any other way, it unloads the model and frees the memory as it closes. `foundry model unload
+qwen2.5-7b` frees it by hand.
 
 Stats shows what was chosen and the budget, for example `Chat: qwen2.5-7b, 5.5 GB on the GPU.
 Speech: parakeet-tdt-0.6b-v2, 0.7 GB on the GPU. Budget: 8.4 GB on the GPU, 21.8 GB of system
@@ -399,12 +456,15 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Brain` | `role`, `sight_rules` | its job as a rubber duck, and what it is told about seeing; its tone is `personality.md` |
 | `Mind` | `max_memories`, `max_skills` | 40 memories in the prompt, 2 skills a message |
 | `Brain` | `max_tokens`, `max_history` | 160; 6 messages, the last three exchanges, sent with each prompt |
+| `Brain` | `debug_role`, `debug_max_tokens`, `debug_temperature` | while debugging: the slim prompt, 220 tokens, 0.3 |
+| `Brain` | `keep_loaded_from_editor` | on: run from the editor, the model stays loaded on closing |
+| `Pet` | `read_ahead_ms` | 3000: how old a screen read while typing may be and still be used at Send |
 | `Voice` | `volume`, `rate` | 70, 1.0 |
 | `ScreenReader` | `max_characters` | 6000 characters of screen text a message |
 | `Searcher`, `FactSearcher` | `max_results`, `max_snippet`, `search_urls` | 5 results, 300 characters each, Lite then HTML |
 | `Mind` | `fact_topics`, `fact_search_wait` | What it searches for new facts, in turn; 300 s before trying again after a search found none |
 | `Listener` | `language` | empty, so the system language |
-| `Listener` | `speech_threshold_db`, `pause_seconds` | -40 dB, 0.8 s |
+| `Listener` | `speech_threshold_db`, `pause_seconds` | -40 dB, 0.6 s |
 | `Squeak` | `stream` | the four squeaks, picked at random |
 
 ## Layout
@@ -414,9 +474,11 @@ scenes/pet.tscn             the pet window: the duck's viewport, Brain, Voice, S
 scenes/duck.tscn            the 3D duck, its camera and lights
 scripts/pet.gd              edge walking, dragging, the bubble, greetings, stats and voice settings
 scripts/duck.gd             the duck's poses and animations
-scripts/brain.gd            starts Foundry Local, picks the models and talks to its OpenAI-compatible API
+scripts/brain.gd            starts Foundry Local, picks the models, builds each prompt and checks each sentence
+scripts/chat_stream.gd      one streamed reply from Foundry's OpenAI-compatible API, a few words at a time
+scripts/hints.gd            the checks done in code while debugging
 scripts/mind.gd             the duck's name, personality, memories and skills, in user://duck
-seed/                       the first personality and skills, copied to user://duck on first run
+seed/                       the first personality and skills, copied to user://duck on first run; previous/ holds the skill versions they replace
 scripts/model_preferences.gd  the ranked model lists and the memory budget
 resources/model_preferences.tres  the lists themselves, edited in the inspector
 scripts/screen_reader.gd    captures the screen and reads it with the system OCR
@@ -434,8 +496,9 @@ assets/icons/               the microphone icon
 tools/npu_tops.py           the TOPS report as a standalone script
 tools/model_shot.gd         renders a model from four sides
 tools/inspect_model.gd      prints a model's nodes, size, materials and animations
+tools/debug_bench.gd        scores the duck at debugging and times it, against the real model
 tests/unit/                 GUT tests
-tests/fixtures/             Foundry's real catalog output, for the model choice tests
+tests/fixtures/             Foundry's real catalog output, DuckDuckGo result pages, and OCR of an editor
 ```
 
 ## Testing
@@ -455,8 +518,9 @@ git clone --depth 1 --branch v9.7.1 https://github.com/bitwes/Gut.git /tmp/gut &
 They cover the edge walking, corner turns, rolls and facing; the duck's poses and scene; the
 scene's wiring, tabs and input box; the greetings and the Stats text; blanking the pet's own
 windows out of the capture and tidying the OCR text; the TOPS lookups and arithmetic; the brain's
-handling of Foundry Local's responses and of the screen text; and choosing, saving and falling back
-between voices. They do not need Foundry Local installed, and headless Godot has no text-to-speech
+handling of Foundry Local's responses and of the screen text; the streamed reply's events, the
+sentence checks and the slim debugging prompt; the code checks and the error-first screen text;
+Kokoro's sentence queue; and choosing, saving and falling back between voices. They do not need Foundry Local installed, and headless Godot has no text-to-speech
 or screen, so they also show those missing stays quiet rather than failing.
 
 Things found the hard way:
@@ -486,6 +550,14 @@ Things found the hard way:
 - Listening must not wait on anything but the voice. It used to resume only if the duck was still
   in its `talk` animation when the speech ended, so a changed animation left it deaf; it now
   resumes when the voice finishes, with a timer as a backstop in case the system never says so.
+- On macOS the duck never woke: `foundry server start` leaves the daemon running, and the daemon
+  inherits the command's stdout. `OS.execute` reads a child's stdout until it closes, so it waited
+  for good. There the server is started through `/bin/sh -c "exec ... </dev/null >/dev/null 2>&1"`;
+  Godot passes nothing after an `sh -c` script, so the CLI's path is quoted into the script itself.
+  Windows starts it directly as before.
+- The repetition penalties that keep small talk fresh ruin code: the model avoids tokens it has
+  used, so after the first backtick or `+` it writes spaces instead, and it stopped at "The line
+  that looks wrong is:" when the next thing was code. They are off while debugging.
 - A click handled through `Area2D.input_event` is lost when the press and the release fall in the
   same physics frame: picking sees the press a frame late, after the release has gone by, and the
   duck is left stuck to the cursor. The window's mouse passthrough already limits input to the

@@ -41,6 +41,9 @@ enum State { WALK, IDLE, DRAG, FALL, CHAT, SLEEP }
 ]
 ## What the Test button says in the voice being tried.
 @export var test_line: String = "Quack! I'm your rubber duck. Is this how you want me to sound?"
+## The screen is read as the user starts typing or speaking; at Send that reading is used if it is
+## at most this many milliseconds old, so Send does not wait on OCR.
+@export var read_ahead_ms: int = 3000
 
 var edge: Edge = Edge.BOTTOM
 ## +1 is rightwards on the top and bottom edges and downwards on the sides.
@@ -51,6 +54,14 @@ var state: State = State.SLEEP:
 var screen_position: Vector2 = Vector2.ZERO
 ## What the last look at the screen found, for the Stats tab; "" before the first look.
 var screen_note: String = ""
+## Whether the answer coming in has shown a sentence yet, and how long reading the screen took.
+var _streamed: bool = false
+var _read_ms: int = -1
+var _look_started: int = 0
+## The screen read ahead, while the user was typing or talking, and when; used at Send if fresh.
+var _reading_ahead: bool = false
+var _ahead_text: String = ""
+var _ahead_at: int = -1
 ## Seconds spent waking up, for the warm-up message.
 var _waking_seconds: int = 0
 var _drag_offset: Vector2 = Vector2.ZERO
@@ -304,7 +315,7 @@ func _say(text: String) -> void:
 
 ## The Stats tab, and whether the chat input is open yet.
 func _update_stats() -> void:
-	stats.text = stats_text(brain.status, brain.hardware, brain.model_id, _voice_name(voice.voice_id), screen_note, brain.choice)
+	stats.text = stats_text(brain.status, brain.hardware, brain.model_id, _voice_name(voice.voice_id), screen_note, brain.choice, timing_text(brain.timings, _read_ms))
 	# Nothing to type into until it is awake, and nothing to send while it is thinking.
 	bubble_input.editable = brain.is_ready()
 	send_button.disabled = not brain.is_ready() or is_thinking()
@@ -435,7 +446,9 @@ func _on_idle_timer_timeout() -> void:
 func _on_voice_started() -> void:
 	if state == State.CHAT:
 		duck.play(&"talk")
-		_scroll_along(_spoken)
+		# Once per answer, when the whole of it is known; it starts on its first sentence.
+		if not _spoken.is_empty() and (_scroll_tween == null or not _scroll_tween.is_running()):
+			_scroll_along(_spoken)
 	_update_status()
 
 
@@ -510,14 +523,34 @@ func _on_wake_clock_timeout() -> void:
 	_update_status()
 
 
+## A sentence of the answer, as soon as it is written: shown, and said after the one before.
+func _on_brain_sentence(text: String) -> void:
+	if not _streamed:
+		_streamed = true
+		bubble_text.text = "You: %s\n\n%s" % [_last_line, text] if not _last_line.is_empty() else text
+		bubble_text.scroll_to_line(0)
+		if state == State.CHAT:
+			_say(text)
+		return
+	bubble_text.text += " " + text
+	if state == State.CHAT:
+		voice.add(text)
+		listen_timer.start(listen_timer.time_left + text.length() / 14.0)
+
+
 func _on_brain_replied(text: String) -> void:
 	bubble_text.text = ("You: %s\n\n%s" % [_last_line, text] if not _last_line.is_empty() else text) + _take_notes()
-	bubble_text.scroll_to_line(0)
 	_update_stats()
-	if state == State.CHAT:
-		_spoken = text
+	if state != State.CHAT:
+		return
+	_spoken = text
+	if not _streamed:
+		# Nothing came as sentences, such as "my brain did not answer": say it whole.
+		bubble_text.scroll_to_line(0)
 		_say(text)
-		bubble_input.grab_focus()
+	elif voice.is_speaking():
+		_scroll_along(text)
+	bubble_input.grab_focus()
 
 
 func _on_test_pressed() -> void:
@@ -568,7 +601,7 @@ func _send(line: String) -> void:
 		searcher.search(query)
 	else:
 		bubble_text.text = "You: %s\n\nLooking at your screen..." % line
-		_look()
+		_look_or_reuse()
 	_update_stats()
 
 
@@ -580,18 +613,60 @@ func _on_searcher_searched(results: Array[Dictionary]) -> void:
 	elif not searcher.last_error.is_empty():
 		_notes.append(searcher.last_error)
 	bubble_text.text = "You: %s\n\nLooking at your screen..." % _last_line
+	_look_or_reuse()
+
+
+## The screen read while they were typing or talking, if it is fresh; one being read now, waited for;
+## otherwise a new read.
+func _look_or_reuse() -> void:
+	if is_fresh(_ahead_at, Time.get_ticks_msec(), read_ahead_ms):
+		_ahead_at = -1
+		_read_ms = 0
+		_on_screen_reader_read_finished.call_deferred(_ahead_text)
+	elif not _reading_ahead:
+		_look()
+
+
+## Starts reading the screen ahead of Send: on the first letter typed, or as the mic hears speech.
+func _read_ahead() -> void:
+	if not brain.is_ready() or screen_reader.is_reading() or not _pending_line.is_empty():
+		return
+	_reading_ahead = true
 	_look()
 
 
+func _on_input_text_changed(text: String) -> void:
+	if text.length() == 1:
+		_read_ahead()
+
+
+static func is_fresh(read_at: int, now: int, limit_ms: int) -> bool:
+	return read_at >= 0 and now - read_at <= limit_ms
+
+
 func _look() -> void:
+	_read_ms = -1
+	_look_started = Time.get_ticks_msec()
 	var window: Window = get_window()
 	var own_windows: Array[Rect2i] = [Rect2i(window.position, window.size), Rect2i(bubble.position, bubble.size)]
 	screen_reader.read(window.current_screen, own_windows)
 
 
 func _on_screen_reader_read_finished(text: String) -> void:
+	if _reading_ahead:
+		_reading_ahead = false
+		_ahead_text = text
+		_ahead_at = Time.get_ticks_msec()
+		# Nobody is waiting yet: keep it for Send.
+		if _pending_line.is_empty():
+			return
+		_ahead_at = -1
 	screen_note = screen_reader.last_error if not screen_reader.last_error.is_empty() else "%d characters read last time" % text.length()
+	if _read_ms < 0:
+		_read_ms = Time.get_ticks_msec() - _look_started
 	bubble_text.text = "You: %s\n\n..." % _last_line
+	_streamed = false
+	_spoken = ""
 	brain.ask(_pending_line, text, _web_text)
 	_pending_line = ""
 	_web_text = ""
@@ -625,7 +700,9 @@ func _on_listener_heard(text: String) -> void:
 	_send(text)
 
 
-func _on_listener_mode_changed(_mode: Listener.Mode) -> void:
+func _on_listener_mode_changed(mode: Listener.Mode) -> void:
+	if mode == Listener.Mode.HEARING:
+		_read_ahead()
 	_update_stats()
 	_update_status()
 
@@ -803,7 +880,7 @@ static func facing_for(on_edge: Edge, toward: int) -> int:
 
 
 ## What the Stats tab shows: the brain's state, the hardware, the model, the voice and the last look.
-static func stats_text(status: String, hardware: String, model: String, voice_name: String, screen: String = "", choice: String = "") -> String:
+static func stats_text(status: String, hardware: String, model: String, voice_name: String, screen: String = "", choice: String = "", last_answer: String = "") -> String:
 	var lines: PackedStringArray = PackedStringArray([status])
 	if not hardware.is_empty():
 		lines.append(hardware)
@@ -814,7 +891,26 @@ static func stats_text(status: String, hardware: String, model: String, voice_na
 	lines.append("Voice: " + voice_name)
 	if not screen.is_empty():
 		lines.append("Screen: " + screen)
+	if not last_answer.is_empty():
+		lines.append("Last answer: " + last_answer)
 	return "\n".join(lines)
+
+
+## How quickly the last answer came: reading the screen, the first word, the first sentence, the
+## whole of it, and how it ended ("stop", or "length" when it ran out of tokens).
+static func timing_text(timings: Dictionary, read_ms: int) -> String:
+	if not timings.has("reply"):
+		return ""
+	var parts: PackedStringArray = PackedStringArray()
+	if read_ms >= 0:
+		parts.append("screen %d ms" % read_ms)
+	if timings.has("first_token"):
+		parts.append("first word %d ms" % timings["first_token"])
+	if timings.has("first_sentence"):
+		parts.append("first sentence %d ms" % timings["first_sentence"])
+	parts.append("whole %.1f s" % (float(timings["reply"]) / 1000.0))
+	var ended: String = String(timings.get("finish_reason", ""))
+	return ", ".join(parts) + (" (%s%s)" % [ended, ", debugging" if timings.get("debugging", false) else ""] if not ended.is_empty() else "")
 
 
 ## What the status line says while the mic is on.

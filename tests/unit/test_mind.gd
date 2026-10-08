@@ -32,9 +32,9 @@ func test_first_run_seeds_the_personality_and_skills() -> void:
 	assert_string_contains(mind.personality(), "Ernie")
 	assert_false("<!--" in mind.personality(), "the note to the user is not sent to the model")
 	var names: Array = mind.skills().map(func(s: Dictionary) -> String: return s["name"])
-	assert_has(names, "rubber-duck-method")
-	assert_has(names, "reading-errors")
 	assert_has(names, "godot-gdscript")
+	assert_has(names, "python")
+	assert_has(names, "javascript")
 
 
 func test_seeding_never_overwrites_your_edits() -> void:
@@ -86,8 +86,9 @@ func test_a_taught_skill_is_written_and_brought_up_by_its_words() -> void:
 
 
 func test_skills_match_whole_words_most_hits_first() -> void:
-	var picked: Array[Dictionary] = mind.skills_for("NullReferenceException error in my Godot node, the scene is broken")
+	var picked: Array[Dictionary] = mind.skills_for("My Godot node and scene, a Python traceback and a JavaScript promise")
 	assert_eq(picked.size(), 2, "at most two skills a message")
+	assert_eq(picked[0]["name"], "godot-gdscript", "three of its words, the most")
 	assert_eq(mind.skills_for("I am rebuilding the bugle").size(), 0, "no trigger word as a whole word")
 
 
@@ -328,3 +329,26 @@ func test_facts_found_on_the_web_join_its_own_and_come_first_as_untold() -> void
 func test_a_capitalised_tag_is_hidden_too() -> void:
 	assert_eq(Mind.strip_tags("Which line is it? [Remember: the line is total = s]"), "Which line is it?")
 	assert_eq(Mind.find_tags("[Name: Quackers]"), [["name", "Quackers"]])
+
+
+func test_a_phrase_said_over_and_over_is_cut_back_too() -> void:
+	assert_eq(Mind.without_babble("The NaN is a typo. console.log(total, \"4 * 2\", \"8\", \"4 * 2\", \"8\", \"4 * 2\", \"8\", \"4 * 2\", \"8\", \"4 * 2\", \"8\""), "The NaN is a typo.")
+
+
+func test_an_untouched_old_skill_is_brought_up_to_date_and_an_edited_one_kept() -> void:
+	var skills: String = ROOT.path_join("skills")
+	var old_method: String = FileAccess.get_file_as_string("res://seed/previous/rubber-duck-method.md")
+	var old_godot: String = FileAccess.get_file_as_string("res://seed/previous/godot-gdscript.md")
+	var file: FileAccess = FileAccess.open(skills.path_join("rubber-duck-method.md"), FileAccess.WRITE)
+	file.store_string(old_method.replace("\r", ""))
+	file.close()
+	file = FileAccess.open(skills.path_join("godot-gdscript.md"), FileAccess.WRITE)
+	file.store_string(old_godot)
+	file.close()
+	file = FileAccess.open(skills.path_join("reading-errors.md"), FileAccess.WRITE)
+	file.store_string("---\nname: reading-errors\ntriggers: error\n---\nMy own way of reading errors.\n")
+	file.close()
+	mind.ensure_seeded()
+	assert_false(FileAccess.file_exists(skills.path_join("rubber-duck-method.md")), "gone from the seed, so gone, line endings aside")
+	assert_string_contains(FileAccess.get_file_as_string(skills.path_join("godot-gdscript.md")), "Usual causes in Godot 4", "replaced by the new version")
+	assert_string_contains(FileAccess.get_file_as_string(skills.path_join("reading-errors.md")), "My own way", "edited, so kept")
