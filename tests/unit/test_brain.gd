@@ -56,7 +56,7 @@ func test_screen_text_goes_with_the_latest_line_only() -> void:
 	]
 	var sent: Array[Dictionary] = Brain.with_screen(history, "var x = null\nprint(x.name)")
 	assert_string_contains(sent[3]["content"], "print(x.name)")
-	assert_string_ends_with(sent[3]["content"], "The user says: why is this null?")
+	assert_string_contains(sent[3]["content"], "The user says: why is this null?")
 	assert_eq(sent[1]["content"], "first", "older lines are not given the screen")
 	assert_eq(history[3]["content"], "why is this null?", "the kept history is not changed")
 
@@ -69,7 +69,7 @@ func test_an_unreadable_screen_is_said_plainly() -> void:
 func test_the_model_is_told_it_only_sees_ocr_text() -> void:
 	var brain: Brain = Brain.new()
 	assert_string_contains(brain.sight_rules, "OCR")
-	assert_string_contains(brain.sight_rules, "Never describe anything that is not in that text")
+	assert_string_contains(brain.sight_rules, "never describe anything that is not in that text")
 	brain.free()
 
 
@@ -79,3 +79,50 @@ func test_chat_body_is_openai_shaped() -> void:
 	assert_eq(body["model"], "m")
 	assert_eq(body["messages"], history)
 	assert_eq(body["max_tokens"], 99)
+
+
+func test_a_model_counts_as_loaded_by_alias_or_build() -> void:
+	# What `foundry model list --loaded -o json` printed with the duck's two models loaded.
+	var loaded: Array = ModelPreferences.parse_catalog('{"models":[{"alias":"parakeet-tdt-0.6b-v2","id":"parakeet-tdt-0.6b-v2-cuda-gpu:1","type":"Speech"},{"alias":"qwen2.5-coder-7b","id":"qwen2.5-coder-7b-instruct-trtrtx-gpu:2","type":"Chat"}]}', "models")
+	assert_true(Brain.is_loaded(loaded, "qwen2.5-coder-7b"))
+	assert_true(Brain.is_loaded(loaded, "qwen2.5-coder-7b-instruct-trtrtx-gpu"), "a build id, without its version")
+	assert_false(Brain.is_loaded(loaded, "phi-4-mini"))
+	assert_false(Brain.is_loaded([], "qwen2.5-coder-7b"))
+
+
+func test_loading_does_not_wait_on_the_load_command() -> void:
+	# `foundry model load` can keep running after the model is up (CLI 0.10.3); the brain watches
+	# the loaded list instead and gives up after a while.
+	var source: String = (load("res://scripts/brain.gd") as GDScript).source_code
+	assert_string_contains(source, '["model", "list", "--loaded", "-o", "json"]')
+	assert_false('OS.execute(_foundry, ["model", "load"' in source)
+	assert_gt(Brain.LOAD_TIMEOUT_SECONDS, 60)
+
+
+func test_the_prompt_carries_the_last_three_exchanges() -> void:
+	var brain: Brain = load("res://scripts/brain.gd").new()
+	assert_eq(brain.max_history, 6, "three of yours, three of the duck's")
+	var history: Array[Dictionary] = [{"role": "system", "content": "s"}]
+	for i: int in 10:
+		history.append({"role": "user" if i % 2 == 0 else "assistant", "content": str(i)})
+	var kept: Array[Dictionary] = Brain.trimmed(history, brain.max_history)
+	assert_eq(kept.map(func(m: Dictionary) -> String: return m["content"]), ["s", "4", "5", "6", "7", "8", "9"])
+	brain.free()
+
+
+func test_what_the_duck_says_on_its_own_joins_the_conversation() -> void:
+	var source: String = (load("res://scripts/pet.gd") as GDScript).source_code
+	assert_string_contains(source, "brain.note_said(_greeting)")
+	var brain_source: String = (load("res://scripts/brain.gd") as GDScript).source_code
+	assert_string_contains(brain_source, "messages.append_array(mind.recent(max_history))", "picks up where it left off")
+
+
+func test_greetings_open_a_conversation_not_a_debugging_session() -> void:
+	var pet: Pet = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	for greeting: String in pet.greetings:
+		for word: String in ["debug", "broken", "code", "wrong"]:
+			assert_false(word in greeting.to_lower(), "%s in %s" % [word, greeting])
+	pet.free()
+	var brain: Brain = load("res://scripts/brain.gd").new()
+	assert_string_contains(brain.role, "Do not steer the talk towards code")
+	brain.free()

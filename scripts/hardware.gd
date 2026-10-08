@@ -81,6 +81,33 @@ static func nvidia_gpu() -> Array:
 	return [parts[0].strip_edges(), parts[1].strip_edges().to_float()]
 
 
+## Megabytes of memory models can use on each kind of device. An NPU and the CPU share system
+## memory; so does a GPU whose own memory is unknown or small (an integrated GPU, or a Mac).
+static func memory_budgets(share: float) -> Dictionary:
+	var system: float = system_memory_mb()
+	var gpu: float = gpu_memory_mb()
+	return {"gpu": (gpu if gpu > 0.0 else system) * share, "npu": system * share, "cpu": system * share}
+
+
+static func system_memory_mb() -> float:
+	return float(OS.get_memory_info().get("physical", 0)) / 1048576.0
+
+
+## Dedicated GPU memory in megabytes, or 0 when the GPU shares system memory or cannot be asked.
+static func gpu_memory_mb() -> float:
+	var output: Array = []
+	if OS.execute("nvidia-smi", ["--query-gpu=memory.total", "--format=csv,noheader,nounits"], output) == 0 and not output.is_empty():
+		return String(output[0]).split("\n", false)[0].strip_edges().to_float()
+	if OS.get_name() != "Windows":
+		return 0.0
+	# Other Windows GPUs report their memory in the display adapter class's registry keys.
+	var command: String = r"(Get-ItemProperty 'HKLM:\SYSTEM\ControlSet001\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0*' -ErrorAction SilentlyContinue | ForEach-Object { $_.'HardwareInformation.qwMemorySize' } | Measure-Object -Maximum).Maximum"
+	output.clear()
+	OS.execute("powershell", ["-NoProfile", "-Command", command], output)
+	var mb: float = "".join(output).strip_edges().to_float() / 1048576.0
+	return mb if mb >= 2048.0 else 0.0
+
+
 ## One line per accelerator, for the pet to say when asked what it runs on.
 static func describe() -> String:
 	var lines: PackedStringArray = PackedStringArray()

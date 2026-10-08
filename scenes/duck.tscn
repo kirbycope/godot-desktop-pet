@@ -22,6 +22,41 @@ transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, 0, 0, 0)
 
 [node name="Model" parent="Pivot/Body/Yaw" instance=ExtResource("2")]
 
+[node name="Zzz" type="Node3D" parent="."]
+
+[node name="Z1" type="Label3D" parent="Zzz"]
+visible = false
+pixel_size = 0.0012
+billboard = 1
+no_depth_test = true
+modulate = Color(0.25, 0.35, 0.8, 1)
+outline_modulate = Color(1, 1, 1, 1)
+text = "Z"
+font_size = 36
+outline_size = 10
+
+[node name="Z2" type="Label3D" parent="Zzz"]
+visible = false
+pixel_size = 0.0012
+billboard = 1
+no_depth_test = true
+modulate = Color(0.25, 0.35, 0.8, 1)
+outline_modulate = Color(1, 1, 1, 1)
+text = "Z"
+font_size = 36
+outline_size = 10
+
+[node name="Z3" type="Label3D" parent="Zzz"]
+visible = false
+pixel_size = 0.0012
+billboard = 1
+no_depth_test = true
+modulate = Color(0.25, 0.35, 0.8, 1)
+outline_modulate = Color(1, 1, 1, 1)
+text = "Z"
+font_size = 36
+outline_size = 10
+
 [node name="Camera" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 projection = 1

@@ -7,20 +7,28 @@ extends Node3D
 ## turns it left or right.
 
 ## Everything the pet asks for. The model's own "Take 001" clip is not used.
-const ANIMATIONS: Array[StringName] = [&"walk", &"climb", &"hang", &"idle", &"cheer", &"think", &"talk", &"fall", &"land"]
+const ANIMATIONS: Array[StringName] = [&"walk", &"climb", &"hang", &"idle", &"cheer", &"think", &"talk", &"fall", &"land", &"squeeze", &"sleep", &"wake"]
+## How long one hop of `cheer` takes: crouch, leap, land, settle.
+const HOP_SECONDS: float = 0.9
+## The yaw that points the model's face (its +X) at the camera.
+const VIEWER_YAW: float = -90.0
 ## Where the model's base sits: the bottom of the 0.34 m tall orthographic view, a hair above it.
 const BASE: Vector3 = Vector3(0.0, -0.168, 0.0)
 
 ## Degrees the duck turns towards the camera, so it is seen three-quarters on rather than in profile.
 @export_range(0.0, 90.0) var turn_to_camera: float = 30.0
+## How quickly it turns, to look at you or to walk the other way; higher is quicker.
+@export var turn_speed: float = 10.0
 
 var animation: StringName = &"idle"
 ## +1 faces right (the model's +X), -1 faces left, both along the edge it stands on.
-var facing: int = 1:
+var facing: int = 1
+## True while it is talking with you: it turns round to face the camera, and perks up as it does.
+var looking_at_viewer: bool = false:
 	set(value):
-		facing = value
-		if is_node_ready():
-			yaw.rotation_degrees.y = yaw_for(facing, turn_to_camera)
+		if value and not looking_at_viewer:
+			_perk_time = 0.0
+		looking_at_viewer = value
 ## Degrees round the view axis: 0 on the floor, 90 on the right wall, 180 on the ceiling, -90 on the left.
 var roll: float = 0.0:
 	set(value):
@@ -28,23 +36,40 @@ var roll: float = 0.0:
 		if is_node_ready():
 			pivot.rotation_degrees.z = roll
 var _time: float = 0.0
+var _perk_time: float = INF
 
 @onready var pivot: Node3D = $Pivot
 @onready var body: Node3D = $Pivot/Body
 @onready var yaw: Node3D = $Pivot/Body/Yaw
+@onready var zzz: Array[Label3D] = [$Zzz/Z1, $Zzz/Z2, $Zzz/Z3]
 
 
 func _ready() -> void:
-	yaw.rotation_degrees.y = yaw_for(facing, turn_to_camera)
+	yaw.rotation_degrees.y = target_yaw()
 	pivot.rotation_degrees.z = roll
 
 
 func _process(delta: float) -> void:
 	_time += delta
+	_perk_time += delta
 	var p: Array = pose(animation, _time)
 	body.position = p[0]
 	body.rotation_degrees = p[1]
-	body.scale = p[2]
+	body.scale = p[2] * squash(perk(_perk_time))
+	# Eases round rather than snapping; turning about takes the short way, past your side.
+	yaw.rotation.y = lerp_angle(yaw.rotation.y, deg_to_rad(target_yaw()), 1.0 - exp(-turn_speed * delta))
+	for i: int in zzz.size():
+		zzz[i].visible = animation == &"sleep"
+		if zzz[i].visible:
+			var z: Array = z_at(_time, i)
+			zzz[i].position = z[0]
+			zzz[i].modulate.a = z[1]
+			zzz[i].scale = Vector3.ONE * z[2]
+
+
+## Where it faces now: you while it talks with you, otherwise the way it is going.
+func target_yaw() -> float:
+	return VIEWER_YAW if looking_at_viewer else yaw_for(facing, turn_to_camera)
 
 
 func play(name: StringName) -> void:
@@ -58,37 +83,111 @@ static func yaw_for(toward: int, turn: float) -> float:
 
 
 ## [offset from the duck's base point, rotation in degrees, scale] at `t` seconds into `anim`.
-## The base point is the bottom of the view, so rotations pivot on the duck's bottom.
+## The base point is the bottom of the view, so rotations and scaling pivot on the duck's bottom and
+## a squash keeps it sitting on its edge.
+##
+## Every move uses squash and stretch: the duck flattens as it lands or gathers itself, stretches as
+## it rises, falls or dangles, and its volume stays the same throughout (`squash`), so it reads as
+## soft rubber rather than as something shrinking. Impacts settle with a damped wobble (`settle`).
 static func pose(anim: StringName, t: float) -> Array:
 	var offset: Vector3 = Vector3.ZERO
 	var rotation: Vector3 = Vector3.ZERO
-	var size: Vector3 = Vector3.ONE
+	var stretch: float = 0.0
 	match anim:
 		&"walk":
+			# Squashed as each foot lands, stretched at the top of the step.
+			var step: float = absf(sin(t * 10.0))
 			rotation.z = sin(t * 10.0) * 8.0
-			offset.y = absf(sin(t * 10.0)) * 0.008
+			offset.y = step * 0.008
+			stretch = (step * 2.0 - 1.0) * 0.06
 		&"climb":
+			var step: float = absf(sin(t * 14.0))
 			rotation.z = sin(t * 14.0) * 10.0
-			offset.y = absf(sin(t * 14.0)) * 0.006
+			offset.y = step * 0.006
+			stretch = (step * 2.0 - 1.0) * 0.05
 		&"hang":
+			# Dangling: pulled long by its own weight, swinging.
 			rotation.z = sin(t * 3.0) * 12.0
+			stretch = 0.1 + sin(t * 6.0) * 0.03
 		&"idle":
+			# Breathing.
 			offset.y = (sin(t * 2.0) + 1.0) * 0.003
 			rotation.y = sin(t * 0.7) * 10.0
+			stretch = sin(t * 2.0) * 0.025
 		&"cheer":
-			offset.y = absf(sin(t * 6.0)) * 0.04
-			rotation.y = fmod(t * 360.0, 360.0)
+			var hop: Array = hop_at(fmod(t, HOP_SECONDS))
+			offset.y = hop[0]
+			stretch = hop[1]
+			rotation.y = hop[2]
 		&"think":
 			rotation.z = 14.0 * minf(t * 4.0, 1.0)
 			rotation.y = sin(t * 1.5) * 15.0
+			stretch = -0.04 * minf(t * 4.0, 1.0) + sin(t * 1.5) * 0.015
 		&"talk":
-			size.y = 1.0 + absf(sin(t * 14.0)) * 0.07
-			size.x = 1.0 - absf(sin(t * 14.0)) * 0.03
+			# A stretch on every syllable, a little squash between them.
+			var syllable: float = absf(sin(t * 14.0))
 			rotation.z = sin(t * 7.0) * 3.0
+			stretch = syllable * 0.12 - 0.03
 		&"fall":
+			# Stretched along the fall, more the longer it falls.
 			offset.y = 0.06
-			rotation.z = fmod(t * 540.0, 360.0)
+			rotation.z = sin(t * 9.0) * 10.0
+			stretch = 0.22 * minf(t / 0.15, 1.0)
 		&"land":
-			var squash: float = maxf(0.0, 1.0 - t / 0.4)
-			size = Vector3(1.0 + 0.18 * squash, 1.0 - 0.25 * squash, 1.0 + 0.18 * squash)
-	return [BASE + offset, rotation, size]
+			# Flattened by the impact, then wobbling back past round and settling.
+			stretch = settle(t, -0.38, 20.0, 7.0)
+		&"sleep":
+			# Settled low and breathing slowly and deeply, head nodding.
+			rotation.z = -8.0 + sin(t * 1.2) * 3.0
+			stretch = -0.05 + sin(t * 1.6) * 0.035
+		&"wake":
+			# A big stretch and yawn, then a wobble as it comes to.
+			if t < 0.45:
+				stretch = 0.24 * sin(PI * 0.5 * t / 0.45)
+				rotation.z = -8.0 * (1.0 - t / 0.45)
+			else:
+				stretch = settle(t - 0.45, 0.24, 16.0, 6.0)
+		&"squeeze":
+			# Squeezed like a real rubber duck as it squeaks: flattened hard, then springing back.
+			stretch = settle(t, -0.32, 24.0, 6.5)
+			rotation.z = settle(t, 6.0, 24.0, 6.5)
+	return [BASE + offset, rotation, squash(stretch)]
+
+
+## [position, opacity, size] of the `index`th Z of three, rising from the duck's head while it
+## sleeps, each a third of a cycle behind the last.
+static func z_at(t: float, index: int) -> Array:
+	var phase: float = fmod(t * 0.5 + index / 3.0, 1.0)
+	return [Vector3(0.02 + phase * 0.05, 0.04 + phase * 0.11, 0.1), sin(PI * phase), 0.6 + phase * 0.8]
+
+
+## A scale that stretches the duck along its up axis (`amount` above 0) or squashes it (below 0)
+## while keeping its volume: what it loses in height it gains in width and depth.
+static func squash(amount: float) -> Vector3:
+	var height: float = maxf(1.0 + amount, 0.2)
+	var width: float = 1.0 / sqrt(height)
+	return Vector3(width, height, width)
+
+
+## The stretch of perking up to look at you: it rises, stands tall, dips past round and settles.
+static func perk(t: float) -> float:
+	return 0.14 * exp(-6.0 * t) * sin(16.0 * t) if t < 2.0 else 0.0
+
+
+## A damped wobble: `amplitude` at the start, overshooting the other way and dying away.
+## `speed` is in radians a second, `damping` how fast it dies.
+static func settle(t: float, amplitude: float, speed: float, damping: float) -> float:
+	return amplitude * exp(-damping * t) * cos(speed * t)
+
+
+## [height, stretch, spin in degrees] at `u` seconds into one hop: a crouch to gather itself, a
+## stretched leap with a spin, a squash as it lands, then a wobble before the next.
+static func hop_at(u: float) -> Array:
+	const CROUCH: float = 0.15
+	const AIR: float = 0.35
+	if u < CROUCH:
+		return [0.0, -0.18 * sin(PI * 0.5 * u / CROUCH), 0.0]
+	if u < CROUCH + AIR:
+		var flight: float = (u - CROUCH) / AIR
+		return [0.05 * sin(PI * flight), 0.16 * (1.0 - flight) - 0.04 * flight, 360.0 * flight]
+	return [0.0, settle(u - CROUCH - AIR, -0.22, 22.0, 9.0), 0.0]

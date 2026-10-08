@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ModelPreferences" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/model_preferences.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+chat = PackedStringArray("qwen3-coder-*", "qwen2.5-coder-*", "phi-4-mini", "qwen2.5-*")
+speech_english = PackedStringArray("parakeet-tdt-*")
+speech_any_language = PackedStringArray("openai-whisper-small-generic-cpu", "openai-whisper-base-generic-cpu", "openai-whisper-tiny-generic-cpu")
+memory_share = 0.7
+overhead = 1.2

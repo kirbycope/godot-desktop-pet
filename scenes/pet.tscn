@@ -1,13 +1,19 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="Script" path="res://scripts/pet.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/duck.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/brain.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/voice.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/screen_reader.gd" id="5"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
-size = Vector2(124, 108)
+[ext_resource type="Script" path="res://scripts/listener.gd" id="6"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_01.ogg" id="7"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_02.ogg" id="8"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_03.ogg" id="9"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_04.ogg" id="10"]
+[ext_resource type="Texture2D" path="res://assets/icons/microphone.svg" id="11"]
+[ext_resource type="Resource" path="res://resources/model_preferences.tres" id="12"]
+[ext_resource type="Script" path="res://scripts/mind.gd" id="13"]
+[ext_resource type="Script" path="res://scripts/kokoro.gd" id="14"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bubble"]
 bg_color = Color(1, 1, 1, 0.97)
@@ -69,6 +75,48 @@ content_margin_top = 6.0
 content_margin_right = 8.0
 content_margin_bottom = 6.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_status"]
+bg_color = Color(1, 0.9, 0.9, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.15, 0.15, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 8.0
+content_margin_top = 3.0
+content_margin_right = 8.0
+content_margin_bottom = 3.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dot"]
+bg_color = Color(0.92, 0.1, 0.1, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_level_bg"]
+bg_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_level_fill"]
+bg_color = Color(0.85, 0.15, 0.15, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_tabs"]
 content_margin_top = 6.0
 
@@ -81,8 +129,24 @@ LineEdit/font_sizes/font_size = 15
 LineEdit/styles/focus = SubResource("StyleBoxFlat_input_focus")
 LineEdit/styles/normal = SubResource("StyleBoxFlat_input")
 LineEdit/styles/read_only = SubResource("StyleBoxFlat_input_off")
+ItemList/colors/font_color = Color(0.12, 0.14, 0.2, 1)
+ItemList/colors/font_hovered_color = Color(0.12, 0.14, 0.2, 1)
+ItemList/colors/font_selected_color = Color(0.12, 0.14, 0.2, 1)
+ItemList/styles/focus = SubResource("StyleBoxFlat_input")
+ItemList/styles/panel = SubResource("StyleBoxFlat_input")
 RichTextLabel/colors/default_color = Color(0.12, 0.14, 0.2, 1)
 TabContainer/styles/panel = SubResource("StyleBoxEmpty_tabs")
+TooltipLabel/colors/font_color = Color(0.12, 0.14, 0.2, 1)
+TooltipPanel/styles/panel = SubResource("StyleBoxFlat_input")
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_squeak"]
+streams_count = 4
+stream_0/stream = ExtResource("7")
+stream_1/stream = ExtResource("8")
+stream_2/stream = ExtResource("9")
+stream_3/stream = ExtResource("10")
+
+[sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_mic"]
 
 [node name="Pet" type="Node2D"]
 script = ExtResource("1")
@@ -103,18 +167,22 @@ render_target_update_mode = 4
 
 [node name="Duck" parent="View/Viewport" instance=ExtResource("2")]
 
-[node name="Body" type="Area2D" parent="."]
-position = Vector2(72, 72)
-
-[node name="Shape" type="CollisionShape2D" parent="Body"]
-position = Vector2(0, 16)
-shape = SubResource("RectangleShape2D_body")
-
 [node name="IdleTimer" type="Timer" parent="."]
 one_shot = true
 
-[node name="Brain" type="Node" parent="."]
+[node name="ListenTimer" type="Timer" parent="."]
+one_shot = true
+
+[node name="WakeClock" type="Timer" parent="."]
+autostart = true
+
+[node name="Mind" type="Node" parent="."]
+script = ExtResource("13")
+
+[node name="Brain" type="Node" parent="." node_paths=PackedStringArray("mind")]
 script = ExtResource("3")
+mind = NodePath("../Mind")
+preferences = ExtResource("12")
 
 [node name="ModelsRequest" type="HTTPRequest" parent="Brain"]
 timeout = 10.0
@@ -125,8 +193,31 @@ timeout = 120.0
 [node name="Voice" type="Node" parent="."]
 script = ExtResource("4")
 
+[node name="Kokoro" type="Node" parent="Voice"]
+script = ExtResource("14")
+
+[node name="Download" type="HTTPRequest" parent="Voice/Kokoro"]
+download_chunk_size = 1048576
+max_redirects = 10
+
+[node name="Speaker" type="AudioStreamPlayer" parent="Voice/Kokoro"]
+volume_db = -3.0
+
+[node name="ProgressClock" type="Timer" parent="Voice/Kokoro"]
+wait_time = 0.25
+
 [node name="ScreenReader" type="Node" parent="."]
 script = ExtResource("5")
+
+[node name="Squeak" type="AudioStreamPlayer" parent="."]
+stream = SubResource("AudioStreamRandomizer_squeak")
+
+[node name="Listener" type="Node" parent="."]
+script = ExtResource("6")
+
+[node name="Mic" type="AudioStreamPlayer" parent="Listener"]
+stream = SubResource("AudioStreamMicrophone_mic")
+bus = &"Mic"
 
 [node name="Bubble" type="Window" parent="."]
 transparent_bg = true
@@ -165,16 +256,65 @@ metadata/_tab_index = 0
 [node name="Text" type="RichTextLabel" parent="Bubble/Panel/Margin/Tabs/Chat"]
 layout_mode = 2
 size_flags_vertical = 3
-scroll_following = true
 
 [node name="Entry" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Chat"]
 layout_mode = 2
 
+[node name="Status" type="PanelContainer" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_status")
+
+[node name="Row" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Chat/Entry/Status"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Bubble/Panel/Margin/Tabs/Chat/Entry/Status/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+text_overrun_behavior = 3
+theme_override_colors/font_color = Color(0.6, 0.05, 0.05, 1)
+text = "Listening: talk, then pause"
+
+[node name="Level" type="ProgressBar" parent="Bubble/Panel/Margin/Tabs/Chat/Entry/Status/Row"]
+custom_minimum_size = Vector2(36, 10)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_styles/background = SubResource("StyleBoxFlat_level_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_level_fill")
+min_value = -60.0
+max_value = -10.0
+value = -60.0
+show_percentage = false
+
 [node name="Input" type="LineEdit" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "Explain your code, then Enter"
-editable = false
+placeholder_text = "Talk to me, then Enter"
+
+[node name="Mic" type="Button" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
+custom_minimum_size = Vector2(34, 0)
+layout_mode = 2
+tooltip_text = "Talk to the duck. It sends when you pause, and listens again after it answers. Click again to stop."
+toggle_mode = true
+icon = ExtResource("11")
+icon_alignment = 1
+expand_icon = true
+
+[node name="Dot" type="Panel" parent="Bubble/Panel/Margin/Tabs/Chat/Entry/Mic"]
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -12.0
+offset_top = 2.0
+offset_right = -2.0
+offset_bottom = 12.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_dot")
 
 [node name="Send" type="Button" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
 layout_mode = 2
@@ -216,26 +356,106 @@ text = "Apply"
 
 [node name="Current" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings"]
 layout_mode = 2
-size_flags_vertical = 3
-autowrap_mode = 3
+clip_text = true
 text_overrun_behavior = 3
+
+[node name="MicRow" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Settings"]
+layout_mode = 2
+
+[node name="MicLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings/MicRow"]
+layout_mode = 2
+text = "Mic"
+
+[node name="Mics" type="OptionButton" parent="Bubble/Panel/Margin/Tabs/Settings/MicRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "The microphone the duck listens through. Default follows Windows' own default."
+clip_text = true
+fit_to_longest_item = false
+
+[node name="Duck" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 3
+
+[node name="NameRow" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Duck"]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Duck/NameRow"]
+layout_mode = 2
+text = "Name"
+
+[node name="Name" type="LineEdit" parent="Bubble/Panel/Margin/Tabs/Duck/NameRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "No name yet"
+
+[node name="SaveName" type="Button" parent="Bubble/Panel/Margin/Tabs/Duck/NameRow"]
+layout_mode = 2
+text = "Save"
+
+[node name="MemoriesLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Duck"]
+layout_mode = 2
+text = "What it remembers"
+
+[node name="Memories" type="ItemList" parent="Bubble/Panel/Margin/Tabs/Duck"]
+layout_mode = 2
+size_flags_vertical = 3
+max_text_lines = 2
+
+[node name="Buttons" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Duck"]
+layout_mode = 2
+
+[node name="Forget" type="Button" parent="Bubble/Panel/Margin/Tabs/Duck/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Forget the selected memory."
+text = "Forget"
+
+[node name="Folder" type="Button" parent="Bubble/Panel/Margin/Tabs/Duck/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Open the duck's folder: its personality, memories and skills, all plain text."
+text = "Open folder"
 
 [node name="Menu" type="PopupMenu" parent="."]
 item_count = 1
 item_0/text = "Quit"
 item_0/id = 0
 
-[connection signal="input_event" from="Body" to="." method="_on_area_input_event"]
 [connection signal="timeout" from="IdleTimer" to="." method="_on_idle_timer_timeout"]
+[connection signal="timeout" from="ListenTimer" to="." method="_on_listen_timer_timeout"]
+[connection signal="timeout" from="WakeClock" to="." method="_on_wake_clock_timeout"]
+[connection signal="level_changed" from="Listener" to="." method="_on_listener_level_changed"]
 [connection signal="status_changed" from="Brain" to="." method="_on_brain_status_changed"]
 [connection signal="replied" from="Brain" to="." method="_on_brain_replied"]
 [connection signal="request_completed" from="Brain/ModelsRequest" to="Brain" method="_on_models_request_completed"]
 [connection signal="request_completed" from="Brain/ChatRequest" to="Brain" method="_on_chat_request_completed"]
 [connection signal="finished" from="Voice" to="." method="_on_voice_finished"]
+[connection signal="started" from="Voice" to="." method="_on_voice_started"]
+[connection signal="started" from="Voice/Kokoro" to="Voice" method="_on_kokoro_started"]
+[connection signal="finished" from="Voice/Kokoro" to="Voice" method="_on_kokoro_finished"]
+[connection signal="request_completed" from="Voice/Kokoro/Download" to="Voice/Kokoro" method="_on_download_request_completed"]
+[connection signal="finished" from="Voice/Kokoro/Speaker" to="Voice/Kokoro" method="_on_speaker_finished"]
+[connection signal="timeout" from="Voice/Kokoro/ProgressClock" to="Voice/Kokoro" method="_on_progress_clock_timeout"]
+[connection signal="install_progress" from="Voice/Kokoro" to="." method="_on_kokoro_progress"]
+[connection signal="installed" from="Voice/Kokoro" to="." method="_on_kokoro_installed"]
+[connection signal="install_failed" from="Voice/Kokoro" to="." method="_on_kokoro_failed"]
+[connection signal="item_selected" from="Bubble/Panel/Margin/Tabs/Settings/Voices" to="." method="_on_voice_selected"]
 [connection signal="read_finished" from="ScreenReader" to="." method="_on_screen_reader_read_finished"]
 [connection signal="window_input" from="Bubble" to="." method="_on_bubble_window_input"]
 [connection signal="text_submitted" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Input" to="." method="_on_input_text_submitted"]
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Send" to="." method="_on_send_pressed"]
+[connection signal="toggled" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Mic" to="." method="_on_mic_toggled"]
+[connection signal="finished" from="Squeak" to="." method="_on_squeak_finished"]
+[connection signal="heard" from="Listener" to="." method="_on_listener_heard"]
+[connection signal="mode_changed" from="Listener" to="." method="_on_listener_mode_changed"]
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Settings/Buttons/Test" to="." method="_on_test_pressed"]
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Settings/Buttons/Apply" to="." method="_on_apply_pressed"]
 [connection signal="id_pressed" from="Menu" to="." method="_on_menu_id_pressed"]
+[connection signal="item_selected" from="Bubble/Panel/Margin/Tabs/Settings/MicRow/Mics" to="." method="_on_mic_selected"]
+[connection signal="changed" from="Mind" to="." method="_on_mind_changed"]
+[connection signal="text_submitted" from="Bubble/Panel/Margin/Tabs/Duck/NameRow/Name" to="." method="_on_name_submitted"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/NameRow/SaveName" to="." method="_on_save_name_pressed"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/Buttons/Forget" to="." method="_on_forget_pressed"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/Buttons/Folder" to="." method="_on_folder_pressed"]

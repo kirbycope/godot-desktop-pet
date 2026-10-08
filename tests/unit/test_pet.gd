@@ -80,7 +80,7 @@ func test_scene_wires_its_signals_in_the_scene() -> void:
 	var methods: PackedStringArray = PackedStringArray()
 	for i: int in state.get_connection_count():
 		methods.append(state.get_connection_method(i))
-	for method: String in ["_on_area_input_event", "_on_brain_replied", "_on_input_text_submitted", "_on_chat_request_completed", "_on_voice_finished", "_on_test_pressed", "_on_apply_pressed", "_on_send_pressed", "_on_screen_reader_read_finished"]:
+	for method: String in ["_on_mic_toggled", "_on_squeak_finished", "_on_listener_heard", "_on_brain_replied", "_on_input_text_submitted", "_on_chat_request_completed", "_on_voice_finished", "_on_test_pressed", "_on_apply_pressed", "_on_send_pressed", "_on_screen_reader_read_finished"]:
 		assert_has(methods, method)
 
 
@@ -90,7 +90,7 @@ func test_bubble_has_chat_stats_and_settings_tabs() -> void:
 	var titles: PackedStringArray = PackedStringArray()
 	for i: int in tabs.get_tab_count():
 		titles.append(tabs.get_tab_title(i))
-	assert_eq(titles, PackedStringArray(["Chat", "Stats", "Settings"]))
+	assert_eq(titles, PackedStringArray(["Chat", "Stats", "Settings", "Duck"]))
 	assert_not_null(pet.get_node("Bubble/Panel/Margin/Tabs/Settings/Voices") as OptionButton)
 	pet.free()
 
@@ -133,3 +133,159 @@ func test_bubble_is_on_top_but_not_transient() -> void:
 	assert_true(bubble.always_on_top)
 	assert_false(bubble.transient)
 	pet.free()
+
+
+func test_a_quick_click_is_a_click_and_a_pull_is_a_drag() -> void:
+	assert_true(Pet.is_click(Vector2(100, 100), Vector2(100, 100), 4.0), "press and release in one frame")
+	assert_true(Pet.is_click(Vector2(100, 100), Vector2(103, 102), 4.0))
+	assert_false(Pet.is_click(Vector2(100, 100), Vector2(110, 100), 4.0))
+
+
+func test_the_scene_has_no_physics_picking_to_lose_a_click() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	assert_eq(pet.find_children("*", "Area2D", true, false).size(), 0)
+	pet.free()
+
+
+func test_hit_outline_turns_with_the_duck() -> void:
+	var floor: PackedVector2Array = Pet.hit_outline(Vector2(144, 144), Vector2(124, 108), Vector2(0, 16), 0.0)
+	assert_almost_eq(floor[0], Vector2(10, 34), Vector2(0.01, 0.01), "top left on the floor")
+	assert_almost_eq(floor[2], Vector2(134, 142), Vector2(0.01, 0.01), "bottom right sits on the window's bottom")
+	var wall: PackedVector2Array = Pet.hit_outline(Vector2(144, 144), Vector2(124, 108), Vector2(0, 16), 90.0)
+	var right_most: float = -INF
+	for point: Vector2 in wall:
+		right_most = maxf(right_most, point.x)
+	assert_almost_eq(right_most, 142.0, 0.01, "on the right wall it hugs the right side")
+
+
+func test_a_click_squeaks_one_of_four_sounds() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	var randomizer: AudioStreamRandomizer = (pet.get_node("Squeak") as AudioStreamPlayer).stream as AudioStreamRandomizer
+	assert_not_null(randomizer)
+	assert_eq(randomizer.streams_count, 4)
+	for i: int in 4:
+		assert_not_null(randomizer.get_stream(i), "squeak %d" % (i + 1))
+	pet.free()
+
+
+func test_the_mic_button_toggles_with_an_icon() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	var mic: Button = pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Mic")
+	assert_true(mic.toggle_mode)
+	assert_not_null(mic.icon)
+	pet.free()
+
+
+func test_the_hint_says_what_the_mic_is_doing() -> void:
+	assert_eq(Pet.placeholder_for(Listener.Mode.WAITING, true), "Listening... talk, then pause")
+	assert_eq(Pet.placeholder_for(Listener.Mode.HEARING, true), "Hearing you...")
+	assert_eq(Pet.placeholder_for(Listener.Mode.OFF, true), "Talk to me, then Enter")
+	assert_eq(Pet.placeholder_for(Listener.Mode.OFF, false), "Still waking up...")
+
+
+func test_the_box_opens_only_once_the_duck_is_awake() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	assert_true((pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Input") as LineEdit).editable, "nothing in the scene shuts it for good")
+	var source: String = (load("res://scripts/pet.gd") as GDScript).source_code
+	assert_string_contains(source, "bubble_input.editable = brain.is_ready()")
+	assert_string_contains(source, "mic_button.disabled = not brain.is_ready()")
+	pet.free()
+
+
+func test_the_duck_looks_at_you_only_while_the_bubble_is_open() -> void:
+	var source: String = (load("res://scripts/pet.gd") as GDScript).source_code
+	assert_string_contains(source, "duck.looking_at_viewer = true")
+	assert_string_contains(source, "duck.looking_at_viewer = false")
+
+
+func test_the_status_line_says_what_the_mic_is_doing() -> void:
+	assert_eq(Pet.status_for(Listener.Mode.WAITING, false, false), "Listening...")
+	assert_eq(Pet.status_for(Listener.Mode.HEARING, false, false), "Hearing you...")
+	assert_eq(Pet.status_for(Listener.Mode.PAUSED, true, false), "Thinking...")
+	assert_eq(Pet.status_for(Listener.Mode.PAUSED, false, true), "Talking...")
+
+
+func test_listening_comes_back_even_if_the_voice_never_says_it_finished() -> void:
+	assert_gt(Pet.speaking_seconds("A short answer."), 2.0)
+	assert_gt(Pet.speaking_seconds("x".repeat(140)), 11.0, "ten seconds of words, with a margin")
+	var source: String = (load("res://scripts/pet.gd") as GDScript).source_code
+	assert_false('if state == State.CHAT and duck.animation == &"talk":\n\t\t_done_talking()' in source, "resuming does not hang on the animation")
+
+
+func test_the_mic_has_a_red_dot_and_the_chat_a_status_line() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	var dot: Panel = pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Mic/Dot")
+	assert_false(dot.visible, "hidden until the mic is on")
+	var red: Color = (dot.get_theme_stylebox(&"panel") as StyleBoxFlat).bg_color
+	assert_gt(red.r, 0.8)
+	assert_lt(red.g, 0.3)
+	assert_false((pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Status") as Control).visible)
+	assert_not_null(pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Status/Row/Level") as ProgressBar)
+	pet.free()
+
+
+func test_tooltips_are_dark_text_on_light() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	var theme: Theme = (pet.get_node("Bubble/Panel") as Control).theme
+	assert_lt(theme.get_color(&"font_color", &"TooltipLabel").get_luminance(), 0.3)
+	assert_gt((theme.get_stylebox(&"panel", &"TooltipPanel") as StyleBoxFlat).bg_color.get_luminance(), 0.8)
+	pet.free()
+
+
+func test_it_is_happy_to_talk_about_more_than_code() -> void:
+	var brain: Brain = load("res://scripts/brain.gd").new()
+	assert_string_contains(brain.role, "chat happily about whatever they bring up")
+	assert_string_contains(brain.sight_rules, "otherwise ignore it and just talk")
+	brain.free()
+
+
+
+func test_it_sleeps_until_its_brain_is_ready() -> void:
+	assert_eq(Pet.settle_state(Pet.State.WALK, false), Pet.State.SLEEP)
+	assert_eq(Pet.settle_state(Pet.State.IDLE, false), Pet.State.SLEEP, "landing from a drag goes back to sleep")
+	assert_eq(Pet.settle_state(Pet.State.CHAT, false), Pet.State.CHAT, "a click still opens the bubble")
+	assert_eq(Pet.settle_state(Pet.State.DRAG, false), Pet.State.DRAG, "a sleeping duck can still be picked up")
+	assert_eq(Pet.settle_state(Pet.State.WALK, true), Pet.State.WALK)
+
+
+func test_the_warm_up_line_says_what_it_is_doing_and_how_long() -> void:
+	assert_eq(Pet.waking_text("Loading qwen2.5-coder-7b...", 23), "Waking up, 23 s: Loading qwen2.5-coder-7b")
+	assert_eq(Pet.waking_text("I need Foundry Local to think.\nWindows: winget install", 4), "Waking up, 4 s: I need Foundry Local to think")
+
+
+func test_the_wake_clock_ticks_in_the_scene() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	var clock: Timer = pet.get_node("WakeClock")
+	assert_true(clock.autostart)
+	assert_eq(clock.wait_time, 1.0)
+	pet.free()
+
+
+
+func test_a_long_status_never_widens_the_bubble() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	var bubble: Window = pet.get_node("Bubble")
+	var status: Control = pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Status")
+	status.visible = true
+	(pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Status/Row/Label") as Label).text = Pet.waking_text("Fetching mistral-nemo-12b-instruct (first run only)...", 120)
+	var panel: Control = pet.get_node("Bubble/Panel")
+	assert_lte(panel.get_combined_minimum_size().x, float(bubble.size.x), "fits the 340 px bubble, clipped with an ellipsis")
+	pet.free()
+
+
+
+func test_the_status_takes_the_boxs_place_rather_than_a_row_of_its_own() -> void:
+	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	var chat: Node = pet.get_node("Bubble/Panel/Margin/Tabs/Chat")
+	assert_eq(chat.get_children().map(func(n: Node) -> String: return n.name), ["Text", "Entry"], "nothing between the answer and the entry row")
+	assert_eq(pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Status").get_index(), 0, "the status sits where the box is")
+	assert_string_contains((load("res://scripts/pet.gd") as GDScript).source_code, "bubble_input.visible = not status.visible")
+	pet.free()
+
+
+func test_a_long_answer_scrolls_along_as_it_is_spoken() -> void:
+	assert_almost_eq(Pet.scroll_seconds("x".repeat(140)), 9.0, 0.01, "about as long as ten seconds of speech, less the top")
+	assert_eq(Pet.scroll_seconds("Hi!"), 0.5, "a short answer does not crawl")
+	var source: String = (load("res://scripts/pet.gd") as GDScript).source_code
+	assert_string_contains(source, "bubble_text.scroll_to_line(0)", "each answer starts from its top")
+	assert_string_contains(source, "_scroll_along(_spoken)", "and scrolls once the voice starts")
