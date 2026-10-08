@@ -160,16 +160,18 @@ func skills_for(text: String) -> Array[Dictionary]:
 ## The system prompt's part that belongs to the duck: name, personality, memories, skills and the
 ## memory protocol.
 func prompt() -> String:
+	return stable_prompt() + "\n\n" + changing_prompt()
+
+
+## The part of the prompt that stays the same from one message to the next: name, personality
+## without its facts, the memory protocol, memories and skill names. It goes first, so a server
+## that caches a prompt's opening (llama.cpp does) reuses it rather than reading it again each turn.
+func stable_prompt() -> String:
 	var parts: PackedStringArray = PackedStringArray()
 	var called: String = duck_name()
 	parts.append("Your name is %s." % called if not called.is_empty() else "You do not have a name yet. If the user offers you one, take it happily.")
-	# Facts it has already told are taken out, so it tells a new one; once all are told, it starts over.
-	var untold: PackedStringArray = untold_facts()
-	parts.append(with_facts(personality(), untold))
+	parts.append(without_facts(personality()))
 	parts.append(PROTOCOL)
-	var recent_questions: PackedStringArray = asked()
-	if not recent_questions.is_empty():
-		parts.append("Questions you asked lately. Do not ask them again; ask about something new they said:\n- " + "\n- ".join(recent_questions))
 	var known: PackedStringArray = memories()
 	if not known.is_empty():
 		var recent: PackedStringArray = known.slice(maxi(0, known.size() - max_memories))
@@ -177,6 +179,16 @@ func prompt() -> String:
 	var all_skills: Array[Dictionary] = skills()
 	if not all_skills.is_empty():
 		parts.append("Skills you have, brought in when they apply: " + ", ".join(all_skills.map(func(s: Dictionary) -> String: return s["name"])) + ".")
+	return "\n\n".join(parts)
+
+
+## The part that changes nearly every message, so it goes last: the facts still to tell (one told
+## is taken out, so it tells a new one) and the questions it asked lately.
+func changing_prompt() -> String:
+	var parts: PackedStringArray = PackedStringArray(["## Things you know for sure\n\n- " + "\n- ".join(untold_facts())])
+	var recent_questions: PackedStringArray = asked()
+	if not recent_questions.is_empty():
+		parts.append("Questions you asked lately. Do not ask them again; ask about something new they said:\n- " + "\n- ".join(recent_questions))
 	return "\n\n".join(parts)
 
 
@@ -429,6 +441,18 @@ static func example_replies_in(text: String) -> PackedStringArray:
 		elif answering:
 			found[-1] = found[-1] + " " + said
 	return found
+
+
+## The personality without its "Things you know for sure" section, heading and all.
+static func without_facts(text: String) -> String:
+	var out: PackedStringArray = PackedStringArray()
+	var inside: bool = false
+	for line: String in text.split("\n"):
+		if line.begins_with("## "):
+			inside = line.strip_edges() == "## Things you know for sure"
+		if not inside:
+			out.append(line)
+	return "\n".join(out).strip_edges()
 
 
 ## The personality with its facts section holding only `facts`.

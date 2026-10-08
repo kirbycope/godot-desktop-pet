@@ -29,6 +29,14 @@ desktop, speech, screen reading and the chat.
    brew tap microsoft/foundrylocal && brew install foundrylocal   # macOS, Apple silicon
    ```
 
+   On a Mac, also install [llama.cpp](https://github.com/ggml-org/llama.cpp), which runs the chat
+   model on Metal (see [On a Mac](#on-a-mac)). Without it the duck still works, on Foundry, but
+   takes about 20 s to start each answer:
+
+   ```bash
+   brew install llama.cpp
+   ```
+
 2. Open the project in Godot 4.8 and run it, or export it for Windows or macOS.
 
 The duck starts asleep: it settles low on the taskbar, breathing slowly, with Zs drifting up from
@@ -153,8 +161,8 @@ it; the message after one counts too, so explaining the bug keeps it there. Then
 
 - **A slim prompt.** In place of the whole personality (2400 tokens with its facts, examples and
   memories) the model gets `debug_role`, a few lines on being a cheerful rubber duck with no
-  stories, facts or jokes while there is a bug to find, with one example of a good turn, and
-  `sight_rules`: about 900 tokens. The first word comes twice as fast, and nothing tempts a duck
+  stories, facts or jokes while there is a bug to find, told to talk only about code and errors
+  that are on screen or in what you said, and `sight_rules`: about 900 tokens. The first word comes twice as fast, and nothing tempts a duck
   fact into the middle of a bug.
 - **The screen text with the error first.** The OCR is put in order before it is sent: error lines
   at the top under "Errors:", then the rest, without repeated lines or runs of file names and menu
@@ -177,6 +185,11 @@ it; the message after one counts too, so explaining the bug keeps it there. Then
   some off), `debug_temperature` 0.3, and no repetition penalties: code repeats its marks and names
   all the time, and with them on the model dropped backticks and `+` and stopped at "The line that
   looks wrong is:".
+
+The debugging prompt once had an example of a good turn, a made-up crash with its answer. Filmed
+in use with nothing wrong on screen, the duck told that example back as the user's own bug, line
+number and all. It went, the bench scored the same without it, and a ninth situation now checks
+that a question with no code or error on screen gets a question back rather than an invented bug.
 
 `tools/debug_bench.gd` measures it: eight situations, three rounds each, through the duck's own
 pipeline in a scratch mind folder, scored by whether the answer names the actual cause, with the
@@ -292,6 +305,40 @@ for an Intel NPU, TensorRT-RTX or CUDA for an NVIDIA RTX GPU, WebGPU for other G
 silicon, and the CPU otherwise. The variant's name ends in its device
 (`qwen2.5-7b-instruct-trtrtx-gpu`), which is how the duck knows where it is thinking.
 
+## On a Mac
+
+Foundry Local runs models on Apple silicon through WebGPU, and there it reads the whole prompt
+again for every answer at about 110 tokens a second. The duck's prompt is about 2,000 tokens, its
+personality most of it, so on an M4 Pro with 24 GB each answer started 22 s after the question,
+even though writing it then took only seven.
+
+So on macOS the chat model runs on llama.cpp's `llama-server` instead, on Metal, and Foundry keeps
+only the speech model. The brain still chooses the model from Foundry's catalog, as below, then
+starts `llama-server` on port 39841 with the GGUF build mapped to that alias in `llama_models` on
+the Brain (`qwen2.5-14b` is `bartowski/Qwen2.5-14B-Instruct-GGUF:Q4_K_M`). The first run downloads
+it from Hugging Face into `~/.cache/huggingface` while the bubble says `Fetching qwen2.5-14b`; its
+output goes to `user://llama-server.log`. Closing the duck stops the server, unless it was run
+from the editor (as with Foundry, below).
+
+Measured on that M4 Pro with `qwen2.5-14b`:
+
+| | Foundry (WebGPU) | llama.cpp (Metal) |
+| --- | --- | --- |
+| Reading a 2,000-token prompt | 22 s | 9 s |
+| The same prompt again | 22 s | none: it keeps the prompt it read last |
+| Writing | 13 tokens a second | 24 tokens a second |
+
+A Mac also starts lower down the list. Its unified memory fits `qwen2.5-14b` (a 24 GB Mac has
+16.8 GB to spend), but memory is not what makes it slow: reading the prompt is arithmetic, which
+an Apple GPU has less of than an NVIDIA card with tensor cores. So `mac_chat` in
+`resources/model_preferences.tres` starts at `qwen2.5-7b`, the model the RTX 4080 Laptop PC runs,
+at half the 14B's work a token. Set `mac_chat` empty to give a Mac the `chat` list.
+
+`llama-server` reuses whatever part of the prompt is unchanged from the last request, so how quick
+an answer is depends on how much of the prompt stays the same between turns. It has three slots,
+chat, debugging and fact finding, so each keeps its own prompt. A chat model with no GGUF in
+`llama_models`, or a Mac without llama.cpp installed, stays on Foundry, and Stats says so.
+
 ## Which models it runs
 
 Nothing is hard-coded to one machine. At startup the brain reads Foundry Local's catalog
@@ -301,6 +348,7 @@ run here, and picks from the ranked lists in `resources/model_preferences.tres`:
 | List | Best first |
 | --- | --- |
 | `chat` | `qwen2.5-14b`, `qwen2.5-7b`, `phi-4-mini`, `qwen2.5-1.5b`, `qwen2.5-0.5b`, then `qwen2.5-coder-*` |
+| `mac_chat` | the same without `qwen2.5-14b`, used in place of `chat` on macOS (see [On a Mac](#on-a-mac)) |
 | `speech_english` | `parakeet-tdt-*` |
 | `speech_any_language` | `openai-whisper-small-generic-cpu`, then `base`, then `tiny` |
 
@@ -453,6 +501,7 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Brain` | `preferences` | `resources/model_preferences.tres`: the ranked model lists and `memory_share` |
 | `Brain` | `model_alias` | empty, so the model is chosen for the machine; set it to force one |
 | `Brain` | `port` | 39839 |
+| `Brain` | `llama_models`, `llama_port`, `llama_context` | GGUF builds for the five chat models, 39841, 16384 tokens: the Mac's llama.cpp chat server |
 | `Brain` | `role`, `sight_rules` | its job as a rubber duck, and what it is told about seeing; its tone is `personality.md` |
 | `Mind` | `max_memories`, `max_skills` | 40 memories in the prompt, 2 skills a message |
 | `Brain` | `max_tokens`, `max_history` | 160; 6 messages, the last three exchanges, sent with each prompt |

@@ -1,5 +1,9 @@
 extends GutTest
 
+## llama-server's /v1/models (version 0.6.0, build 11429) serving qwen2.5-14b with --alias, its
+## Ollama-style "models" list left out.
+const LLAMA_MODELS: String = '{"object":"list","data":[{"id":"qwen2.5-14b","aliases":["qwen2.5-14b"],"tags":[],"object":"model","architecture":{"input_modalities":["text"],"output_modalities":["text"]},"created":1791431385,"owned_by":"llamacpp","meta":{"vocab_type":2,"n_vocab":152064,"n_ctx":6144,"n_ctx_train":32768,"n_embd":5120,"n_params":14770033664,"size":8982142976,"ftype":"Q4_K - Medium"}}]}'
+
 
 func test_device_comes_from_the_variant_suffix() -> void:
 	assert_eq(Brain.device_of("qwen2.5-1.5b-instruct-trtrtx-gpu:2"), "GPU")
@@ -239,3 +243,41 @@ func test_starting_the_server_returns_while_its_daemon_runs_on() -> void:
 	var started: int = Time.get_ticks_msec()
 	assert_eq(OS.execute(command[0], command.slice(1)), 0)
 	assert_lt(Time.get_ticks_msec() - started, 5000, "OS.execute did not wait for the daemon")
+
+
+func test_only_a_mac_runs_chat_on_llama_cpp() -> void:
+	var models: Dictionary = {"qwen2.5-14b": "bartowski/Qwen2.5-14B-Instruct-GGUF:Q4_K_M"}
+	assert_eq(Brain.llama_model(models, "qwen2.5-14b", "macOS"), "bartowski/Qwen2.5-14B-Instruct-GGUF:Q4_K_M")
+	assert_eq(Brain.llama_model(models, "qwen2.5-14b", "Windows"), "", "Foundry has the NPU, CUDA and TensorRT builds there")
+	assert_eq(Brain.llama_model(models, "qwen3-4b", "macOS"), "", "a model with no GGUF mapped stays on Foundry")
+
+
+func test_every_chat_model_the_duck_prefers_has_a_gguf_for_the_mac() -> void:
+	var brain: Brain = load("res://scripts/brain.gd").new()
+	var prefs: ModelPreferences = load("res://resources/model_preferences.tres")
+	for alias: String in prefs.chat + prefs.mac_chat:
+		if not "*" in alias:
+			assert_true(brain.llama_models.has(alias), "%s has a GGUF build in Brain.llama_models" % alias)
+	brain.free()
+
+
+func test_llama_server_runs_in_the_background_on_the_foundry_alias() -> void:
+	var command: PackedStringArray = Brain.llama_command("/opt/homebrew/bin/llama-server", "bartowski/Qwen2.5-14B-Instruct-GGUF:Q4_K_M", "qwen2.5-14b", 39841, 16384, "/Users/me/Library/Application Support/Godot/app_userdata/Desktop Pet/llama-server.log")
+	assert_eq(command.size(), 3, "Godot drops arguments after sh -c's script")
+	assert_eq(command[0], "/bin/sh")
+	assert_eq(command[2], "exec '/opt/homebrew/bin/llama-server' -hf 'bartowski/Qwen2.5-14B-Instruct-GGUF:Q4_K_M' --alias 'qwen2.5-14b' --host 127.0.0.1 --port 39841 -c 16384 -np 3 -ngl 99 --jinja </dev/null >'/Users/me/Library/Application Support/Godot/app_userdata/Desktop Pet/llama-server.log' 2>&1")
+	assert_eq(Brain.shell_quoted("it's"), "'it'\\''s'")
+
+
+func test_llama_server_lists_its_model_under_the_alias() -> void:
+	# What llama-server's /v1/models printed serving qwen2.5-14b with --alias.
+	var data: Variant = Brain.parse_json(LLAMA_MODELS)
+	assert_eq(Brain.pick_model(data["data"], "qwen2.5-14b"), "qwen2.5-14b")
+
+
+func test_a_short_line_said_word_for_word_before_is_dropped() -> void:
+	var said: PackedStringArray = ["cool! I love that. Ducks see ultraviolet."]
+	assert_eq(Brain.keep_sentence("I love that.", said, PackedStringArray()), "", "too few words to compare, but the same words")
+	assert_eq(Brain.keep_sentence("Cool!", said, PackedStringArray()), "")
+	assert_eq(Brain.keep_sentence("I love pancakes.", said, PackedStringArray()), "I love pancakes.")
+	assert_eq(Brain.plain_words("Hi!  I love it, really."), "hi i love it really")

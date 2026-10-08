@@ -16,6 +16,11 @@ extends Resource
 ## which stays last for a machine with no general build. Reasoning models are left out: they think
 ## aloud before answering, which reads badly when spoken.
 @export var chat: PackedStringArray = ["qwen2.5-14b", "qwen2.5-7b", "phi-4-mini", "qwen2.5-1.5b", "qwen2.5-0.5b", "qwen2.5-coder-*"]
+## `chat` on macOS, where it starts at the 7B. A Mac's unified memory fits the 14B, but its GPU
+## reads a prompt far slower than an NVIDIA card's tensor cores: on an M4 Pro the 14B took 9 s to
+## read the duck's prompt on llama.cpp, so it went quiet for seconds where the PC's 7B on TensorRT
+## answers in one. Empty to use `chat` there too.
+@export var mac_chat: PackedStringArray = ["qwen2.5-7b", "phi-4-mini", "qwen2.5-1.5b", "qwen2.5-0.5b", "qwen2.5-coder-*"]
 ## Speech models when the system language is English.
 @export var speech_english: PackedStringArray = ["parakeet-tdt-*"]
 ## Speech models for any language, also the fallback for English. Foundry's CUDA Whisper builds
@@ -29,6 +34,11 @@ extends Resource
 
 const CHAT_TYPES: PackedStringArray = ["Chat", "Multimodal"]
 const SPEECH_TYPES: PackedStringArray = ["Speech"]
+
+
+## The chat list for `os_name`: `mac_chat` on macOS when it has any, `chat` everywhere else.
+func chat_for(os_name: String) -> PackedStringArray:
+	return mac_chat if os_name == "macOS" and not mac_chat.is_empty() else chat
 
 
 ## The best catalog entry for `entries` of one of `types`, or {} when none fits. `budgets` gives the

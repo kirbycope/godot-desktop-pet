@@ -16,6 +16,11 @@ The pet's language models are downloaded at run time by [Foundry Local](https://
 and are not part of this repository; each carries its publisher's licence, which
 `foundry model info <alias>` shows. The default, Qwen2.5 Coder 7B Instruct, is Apache 2.0.
 
+On macOS the chat model is downloaded instead by [llama.cpp](https://github.com/ggml-org/llama.cpp)
+(MIT, installed with Homebrew, not part of this repository) as a GGUF quantisation by
+[bartowski](https://huggingface.co/bartowski) on Hugging Face: Qwen2.5 Instruct 14B, 7B, 1.5B and
+0.5B (Apache 2.0, by the Qwen team) and Phi-4-mini-instruct (MIT, by Microsoft), each at Q4_K_M.
+
 [GUT](https://github.com/bitwes/Gut) (MIT) runs the tests and is fetched, not committed.
 
 The natural voices are downloaded at run time into `user://kokoro` when asked for, and are not

@@ -22,6 +22,23 @@ signal facts_found(facts: PackedStringArray)
 ## `qwen2.5-coder-7b`. Leave empty to choose from the catalog for this machine.
 @export var model_alias: String = ""
 @export var port: int = 39839
+## On macOS the chat model runs on llama.cpp's llama-server, on Metal, rather than on Foundry Local:
+## Foundry reads the whole prompt again every turn there, through WebGPU, at about 110 tokens a
+## second, so the duck's 2,000-token prompt kept it silent for 22 s an answer on an M4 Pro.
+## llama-server keeps the prompt it last read and only reads what changed. Foundry still runs the
+## speech model. Each Foundry chat alias maps to a GGUF build on Hugging Face; one not listed here,
+## or a Mac without `brew install llama.cpp`, stays on Foundry.
+@export var llama_models: Dictionary[String, String] = {
+	"qwen2.5-14b": "bartowski/Qwen2.5-14B-Instruct-GGUF:Q4_K_M",
+	"qwen2.5-7b": "bartowski/Qwen2.5-7B-Instruct-GGUF:Q4_K_M",
+	"phi-4-mini": "bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M",
+	"qwen2.5-1.5b": "bartowski/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M",
+	"qwen2.5-0.5b": "bartowski/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M",
+}
+@export var llama_port: int = 39841
+## Tokens of context, shared by llama-server's three slots: chat, debugging and fact finding, so
+## each keeps its own prompt instead of pushing the others' out.
+@export var llama_context: int = 16384
 @export var max_tokens: int = 160
 ## While debugging: room to finish an explanation (they run 100 to 135 tokens; 160 cut them off),
 ## and a low temperature, since the same bug was found one time in three at 0.8.
@@ -38,7 +55,7 @@ signal facts_found(facts: PackedStringArray)
 @export_multiline var role: String = "You are a friendly little rubber duck who lives on the edge of the user's screen and keeps them company. You are a companion first: chat happily about whatever they bring up, their day, ideas, jokes, questions, and follow the conversation, picking up on what was said before. Do not steer the talk towards code or offer coding help unasked. When they do bring you a coding problem, be a great rubber duck: help them think it through by asking one sharp question at a time, or by pointing at the part that looks wrong. Your answers are read aloud, so keep each turn to a few short sentences, with no code blocks or markdown."
 ## Who the duck is while debugging, in place of the whole personality: a short prompt answers in
 ## half the time and leaves nothing to tempt a duck fact into the middle of a bug.
-@export_multiline var debug_role: String = "You are a cheerful little rubber duck on the edge of the user's screen, and right now you are their rubber duck for debugging: sunny and encouraging, never mean, but no stories, duck facts or jokes while there is a bug to find. Help them find the bug by going through what the code does, one step at a time. Your answers are read aloud, so keep each turn to two or three short sentences, with no lists, headings or code blocks.\n\nA good turn, for the shape of it: they ask why their game crashes, and the screen shows `velocity = speed * direction` with the error \"Invalid operands 'Nil' and 'float'\". You say: The error is on the line that uses speed, and speed is Nil there, so it never got a value. Where do you set speed, and does that run before this line?"
+@export_multiline var debug_role: String = "You are a cheerful little rubber duck on the edge of the user's screen, and right now you are their rubber duck for debugging: sunny and encouraging, never mean, but no stories, duck facts or jokes while there is a bug to find. Help them find the bug by going through what the code does, one step at a time. Your answers are read aloud, so keep each turn to two or three short sentences, with no lists, headings or code blocks. Only talk about code and errors that are on their screen or in what they said; if there is none, ask them to show you or tell you what happens."
 ## Told to the model with every message, so it never pretends to see more than the OCR gave it.
 @export_multiline var sight_rules: String = "Each message comes with text read from the user's screen by OCR, which may be jumbled or partial. Use it only when the user's message is about their screen, their code or an error; otherwise ignore it and just talk with them. You cannot see images, colours or layout, so never describe anything that is not in that text, and never repeat it back; pick out what matters, such as the file name, the code or the error. If they ask about the screen and no text was read, say you could not read it."
 
@@ -55,6 +72,7 @@ const LOAD_TIMEOUT_SECONDS: int = 600
 
 ## Where the CLI may be. GUI apps on macOS do not see Homebrew's PATH, hence the absolute paths.
 const FOUNDRY_PATHS: PackedStringArray = ["foundry", "/opt/homebrew/bin/foundry", "/usr/local/bin/foundry"]
+const LLAMA_PATHS: PackedStringArray = ["/opt/homebrew/bin/llama-server", "/usr/local/bin/llama-server"]
 
 var model_id: String = ""
 ## The chat and speech models chosen, as names the CLI takes, and why.
@@ -66,6 +84,8 @@ var hardware: String = ""
 var messages: Array[Dictionary] = []
 var status: String = "Waking up..."
 var _foundry: String = ""
+## The llama-server running the chat model, or "" when Foundry runs it.
+var _llama: String = ""
 var _thread: Thread = Thread.new()
 ## Set when the duck is closing, so a wait for the model gives up at once.
 var _quitting: bool = false
@@ -103,7 +123,11 @@ func _exit_tree() -> void:
 	if _thread.is_started():
 		_thread.wait_to_finish()
 	# Free the GPU or NPU memory; the Foundry daemon itself is shared and stays up.
-	if not model_id.is_empty() and not keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
+	if not _llama.is_empty():
+		# One still downloading or loading is stopped too, and picks up where it left off next time.
+		if model_id.is_empty() or not keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
+			_stop_llama()
+	elif not model_id.is_empty() and not keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
 		OS.create_process(_foundry, ["model", "unload", chat_name])
 
 
@@ -147,6 +171,11 @@ func ask(text: String, screen_text: String = "", web_text: String = "") -> void:
 	var hints: PackedStringArray = PackedStringArray()
 	if _debugging:
 		var errors: PackedStringArray = ScreenReader.error_lines(screen_text)
+		# The error carries on only within one debugging thread: their message before this one was
+		# about it too. A fresh conversation, or one that wandered off, starts without it.
+		var earlier: String = earlier_user_line(messages)
+		if earlier.is_empty() or not is_debugging(earlier, "", ""):
+			_thread_error = ""
 		if not errors.is_empty():
 			_thread_error = "\n".join(errors).left(600)
 		elif not _thread_error.is_empty():
@@ -154,7 +183,10 @@ func ask(text: String, screen_text: String = "", web_text: String = "") -> void:
 		hints.append_array(Hints.for_text(screen_text, user_lines(messages)))
 	else:
 		_thread_error = ""
-	_sent = with_skills(with_web(with_screen(messages, screen_text, reminder, hints), web_text), skills)
+	# In chat the facts still to tell and the questions asked lately go with this message, beside
+	# the reminder that asks for a fact and a new question.
+	var changing: String = mind.changing_prompt() if mind != null and not _debugging else ""
+	_sent = with_skills(with_web(with_screen(messages, screen_text, reminder, hints, changing), web_text), skills)
 	# What the answer must not repeat: its last answers; in chat also the personality's example
 	# answers and its recent questions. While debugging "what did you expect?" is fair to ask twice.
 	_said = earlier_replies(messages, 3)
@@ -171,7 +203,7 @@ func ask(text: String, screen_text: String = "", web_text: String = "") -> void:
 	var body: Dictionary = chat_body(model_id, _sent, debug_max_tokens if _debugging else max_tokens, _debugging)
 	if _debugging:
 		body["temperature"] = debug_temperature
-	chat_stream.start("127.0.0.1", port, "/v1/chat/completions", ChatStream.streamed(body))
+	chat_stream.start("127.0.0.1", _chat_port(), "/v1/chat/completions", ChatStream.streamed(body))
 
 
 ## Has the model pick out the facts that web search results state plainly, so the duck has new
@@ -211,7 +243,17 @@ func _boot() -> void:
 		return
 	call_deferred("set", "chat_name", chosen["chat"])
 	call_deferred("set", "speech_name", chosen.get("speech", ""))
-	call_deferred("set", "choice", chosen.get("why", ""))
+	var why: String = chosen.get("why", "")
+	var gguf: String = llama_model(llama_models, chosen["chat"], OS.get_name())
+	var llama: String = _find_llama() if not gguf.is_empty() else ""
+	if not gguf.is_empty():
+		why += " Chat on llama.cpp (Metal), %s." % gguf if not llama.is_empty() else " Chat on Foundry, which is slow on a Mac: `brew install llama.cpp` for answers in a second or two."
+	call_deferred("set", "choice", why)
+	if not llama.is_empty():
+		call_deferred("set", "_llama", llama)
+		if _start_llama(llama, gguf, chosen["chat"]):
+			call_deferred("_find_loaded_model")
+		return
 	call_deferred("_set_status", "Fetching %s (first run only)..." % chosen["chat"])
 	output.clear()
 	if OS.execute(_foundry, ["model", "download", chosen["chat"]], output, true) != 0:
@@ -244,8 +286,87 @@ func _start_server(output: Array) -> bool:
 static func server_start_command(foundry: String, server_port: int, os_name: String) -> PackedStringArray:
 	if os_name == "Windows":
 		return PackedStringArray([foundry, "server", "start", "--port", str(server_port), "--idle-timeout", "0"])
-	var quoted: String = "'" + foundry.replace("'", "'\\''") + "'"
-	return PackedStringArray(["/bin/sh", "-c", "exec %s server start --port %d --idle-timeout 0 </dev/null >/dev/null 2>&1" % [quoted, server_port]])
+	return PackedStringArray(["/bin/sh", "-c", "exec %s server start --port %d --idle-timeout 0 </dev/null >/dev/null 2>&1" % [shell_quoted(foundry), server_port]])
+
+
+## `text` as one word for /bin/sh.
+static func shell_quoted(text: String) -> String:
+	return "'" + text.replace("'", "'\\''") + "'"
+
+
+## The GGUF build llama-server runs for the chat model `alias`, as "repo:quant", or "" to run it on
+## Foundry: always off macOS, where Foundry runs it on the NPU, CUDA or TensorRT.
+static func llama_model(models: Dictionary, alias: String, os_name: String) -> String:
+	return String(models.get(alias, "")) if os_name == "macOS" else ""
+
+
+## The command that runs llama-server in the background, its output going to `log_path`. It
+## downloads the model from Hugging Face on the first run, then serves it under the Foundry alias,
+## with the chat template the model ships (--jinja) and every layer on the GPU.
+static func llama_command(llama: String, gguf: String, alias: String, server_port: int, context: int, log_path: String) -> PackedStringArray:
+	var args: String = "-hf %s --alias %s --host 127.0.0.1 --port %d -c %d -np 3 -ngl 99 --jinja" % [shell_quoted(gguf), shell_quoted(alias), server_port, context]
+	return PackedStringArray(["/bin/sh", "-c", "exec %s %s </dev/null >%s 2>&1" % [shell_quoted(llama), args, shell_quoted(log_path)]])
+
+
+## On the thread: has llama-server serve `alias`, keeping one an earlier run left serving it, and
+## waits until it answers. The first run downloads the model, gigabytes of it, so the wait has no
+## time limit: it ends when the server is up, stops, or the duck closes.
+func _start_llama(llama: String, gguf: String, alias: String) -> bool:
+	if _llama_get("/health") == 200 and pick_model(_llama_models_listed(), alias) == alias:
+		return true
+	# One left serving another model, or stuck, gives way.
+	_stop_llama()
+	var log_path: String = ProjectSettings.globalize_path("user://llama-server.log")
+	var command: PackedStringArray = llama_command(llama, gguf, alias, llama_port, llama_context, log_path)
+	var pid: int = OS.create_process(command[0], command.slice(1))
+	call_deferred("_set_status", "Fetching %s (first run only)..." % alias)
+	var loading: bool = false
+	while not _quitting:
+		if pid <= 0 or not OS.is_process_running(pid):
+			var lines: PackedStringArray = FileAccess.get_file_as_string(log_path).strip_edges().split("\n")
+			call_deferred("_set_status", "llama-server stopped:\n" + lines[-1].right(200))
+			return false
+		var code: int = _llama_get("/health")
+		if code == 200:
+			return true
+		# 503 while the model loads, after the download.
+		if code == 503 and not loading:
+			loading = true
+			call_deferred("_set_status", "Loading %s..." % alias)
+		OS.delay_msec(1000)
+	return false
+
+
+## On the thread: the HTTP status of a GET to llama-server, 0 when nothing answers.
+func _llama_get(path: String, output: Array = []) -> int:
+	var lines: Array = []
+	OS.execute("/usr/bin/curl", ["-s", "-m", "2", "-w", "\n%{http_code}", "http://127.0.0.1:%d%s" % [llama_port, path]], lines)
+	var text: String = "".join(lines)
+	output.append(text.left(text.rfind("\n")))
+	return text.substr(text.rfind("\n") + 1).to_int()
+
+
+func _llama_models_listed() -> Array:
+	var output: Array = []
+	_llama_get("/v1/models", output)
+	var data: Variant = parse_json(output[0])
+	return data.get("data", []) if data is Dictionary else []
+
+
+## Stops whichever llama-server listens on the duck's port, this run's or an earlier one's.
+func _stop_llama() -> void:
+	OS.execute("/usr/bin/pkill", ["-f", "llama-server.*--port %d" % llama_port])
+
+
+func _find_llama() -> String:
+	for path: String in LLAMA_PATHS:
+		if FileAccess.file_exists(path):
+			return path
+	return ""
+
+
+func _chat_port() -> int:
+	return llama_port if not _llama.is_empty() else port
 
 
 ## On the thread: starts loading `model_name` and watches Foundry's list of loaded models for it,
@@ -278,7 +399,7 @@ func _choose_models() -> Dictionary:
 	output.clear()
 	OS.execute(_foundry, ["model", "list", "--variants", "-o", "json"], output)
 	var variants: Array = ModelPreferences.parse_catalog("".join(output), "variants")
-	return choose(prefs, models, variants, Hardware.memory_budgets(prefs.memory_share), OS.get_locale_language(), model_alias)
+	return choose(prefs, models, variants, Hardware.memory_budgets(prefs.memory_share), OS.get_locale_language(), model_alias, OS.get_name())
 
 
 func _find_foundry() -> String:
@@ -300,7 +421,7 @@ func _on_models_request_completed(result: int, code: int, _headers: PackedString
 	if model_id.is_empty():
 		_set_status("The model loaded, but the server does not list it.")
 		return
-	device = device_of(model_id)
+	device = "GPU" if not _llama.is_empty() else device_of(model_id)
 	messages = [{"role": "system", "content": system_prompt()}]
 	# Pick up the conversation where it left off last time.
 	if mind != null:
@@ -381,7 +502,7 @@ func _set_status(text: String) -> void:
 
 
 func _url(path: String) -> String:
-	return "http://127.0.0.1:%d%s" % [port, path]
+	return "http://127.0.0.1:%d%s" % [_chat_port(), path]
 
 
 ## "NPU", "GPU" or "CPU", from the suffix Foundry gives every variant (…-qnn-npu, …-cuda-gpu, …-generic-cpu).
@@ -410,8 +531,9 @@ static func is_loaded(loaded: Array, model_name: String) -> bool:
 
 
 ## Speech first, since it is small and needed for talking, then the best chat model in the memory
-## left. `override` names a chat model to use regardless. Returns {chat, speech, why}.
-static func choose(prefs: ModelPreferences, models: Array, variants: Array, budgets: Dictionary, language: String, override: String) -> Dictionary:
+## left, from the list for `os_name`. `override` names a chat model to use regardless. Returns
+## {chat, speech, why}.
+static func choose(prefs: ModelPreferences, models: Array, variants: Array, budgets: Dictionary, language: String, override: String, os_name: String = "") -> Dictionary:
 	var speech_lists: PackedStringArray = prefs.speech_english + prefs.speech_any_language if language == "en" else prefs.speech_any_language
 	var speech: Dictionary = ModelPreferences.pick(speech_lists, models, variants, ModelPreferences.SPEECH_TYPES, budgets, prefs.overhead)
 	var left: Dictionary = budgets.duplicate()
@@ -421,7 +543,7 @@ static func choose(prefs: ModelPreferences, models: Array, variants: Array, budg
 		# The NPU and the CPU draw on the same system memory.
 		for shared: String in (["npu", "cpu"] if kind != "gpu" else ["gpu"]):
 			left[shared] = float(left.get(shared, 0.0)) - needs
-	var chat: Dictionary = {"name": override} if not override.is_empty() else ModelPreferences.pick(prefs.chat, models, variants, ModelPreferences.CHAT_TYPES, left, prefs.overhead)
+	var chat: Dictionary = {"name": override} if not override.is_empty() else ModelPreferences.pick(prefs.chat_for(os_name), models, variants, ModelPreferences.CHAT_TYPES, left, prefs.overhead)
 	var why: String = "Chat: %s. Speech: %s. Budget: %.1f GB on the GPU, %.1f GB of system memory." % [
 		describe_choice(chat, "none fits") + (" (set by model_alias)" if not override.is_empty() else ""),
 		describe_choice(speech, "none fits"),
@@ -443,7 +565,10 @@ func system_prompt(debugging: bool = false) -> String:
 		var called: String = mind.duck_name() if mind != null else ""
 		return "%s%s\n\n%s" % ["Your name is %s. " % called if not called.is_empty() else "", debug_role, sight_rules]
 	# Who it is comes first: small models follow the opening of a prompt and its end most closely.
-	return "%s\n\n%s\n\n%s\n\nYou run entirely on this computer, on its %s.\n%s" % [mind.prompt() if mind != null else "", role, sight_rules, device, hardware]
+	# Only what stays the same from turn to turn: what changes (facts still to tell, recent
+	# questions) goes with the user's message instead (see `ask`), so this and the history before it
+	# are one prefix a server's prompt cache reuses whole.
+	return "%s\n\n%s\n\n%s\n\nYou run entirely on this computer, on its %s.\n%s" % [mind.stable_prompt() if mind != null else "", role, sight_rules, device, hardware]
 
 
 ## Whether to leave the model loaded on closing: only when run from the editor, whose debugger is
@@ -469,7 +594,19 @@ static func keep_sentence(text: String, said: PackedStringArray, questions: Pack
 		return ""
 	if Mind.without_repeats(text, PackedStringArray([Mind.PROTOCOL, REMINDER, DEBUG_REMINDER]), PackedStringArray(), 5, 0.8).is_empty():
 		return ""
+	# A short line too plain to compare by its words ("cool! I love that.") counts as a repeat when
+	# it was said word for word.
+	var plain: String = plain_words(text)
+	for earlier: String in said:
+		for line: String in Mind.sentences_in(earlier):
+			if plain_words(line) == plain:
+				return ""
 	return Mind.without_repeats(text, said, questions)
+
+
+## Lower case, letters and spaces only, for comparing what was said.
+static func plain_words(text: String) -> String:
+	return RegEx.create_from_string(r"\s+").sub(RegEx.create_from_string(r"[^a-z\s]").sub(text.to_lower(), "", true), " ", true).strip_edges()
 
 
 ## The history with the instructions of `skills` added to the user's last message.
@@ -485,7 +622,7 @@ static func with_skills(history: Array[Dictionary], skills: Array[Dictionary]) -
 
 
 ## The history with its last message, the user's, wrapped in the screen text read for it.
-static func with_screen(history: Array[Dictionary], screen_text: String, reminder: String = REMINDER, hints: PackedStringArray = PackedStringArray()) -> Array[Dictionary]:
+static func with_screen(history: Array[Dictionary], screen_text: String, reminder: String = REMINDER, hints: PackedStringArray = PackedStringArray(), notes: String = "") -> Array[Dictionary]:
 	var sent: Array[Dictionary] = history.duplicate(true)
 	if sent.is_empty() or sent[-1].get("role") != "user":
 		return sent
@@ -495,7 +632,7 @@ static func with_screen(history: Array[Dictionary], screen_text: String, reminde
 	var checks: String = ""
 	if not hints.is_empty():
 		checks = "Things to check, from a quick look done in code. They may be wrong: check each against the code before you mention it.\n- %s\n\n" % "\n- ".join(hints)
-	sent[-1]["content"] = "%s\n\nThe user says: %s\n\n%s%s" % [screen, sent[-1]["content"], checks, reminder]
+	sent[-1]["content"] = "%s\n\nThe user says: %s\n\n%s%s%s" % [screen, sent[-1]["content"], checks, notes + "\n\n" if not notes.is_empty() else "", reminder]
 	return sent
 
 

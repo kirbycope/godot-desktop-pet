@@ -352,3 +352,32 @@ func test_an_untouched_old_skill_is_brought_up_to_date_and_an_edited_one_kept() 
 	assert_false(FileAccess.file_exists(skills.path_join("rubber-duck-method.md")), "gone from the seed, so gone, line endings aside")
 	assert_string_contains(FileAccess.get_file_as_string(skills.path_join("godot-gdscript.md")), "Usual causes in Godot 4", "replaced by the new version")
 	assert_string_contains(FileAccess.get_file_as_string(skills.path_join("reading-errors.md")), "My own way", "edited, so kept")
+
+
+func test_what_changes_each_turn_comes_after_what_does_not() -> void:
+	mind.notice("Blue is lovely. What's your favourite thing about the ocean?")
+	var stable: String = mind.stable_prompt()
+	assert_false("## Things you know for sure" in stable, "the facts move to the end")
+	assert_false("28,800" in stable)
+	assert_false("favourite thing about the ocean" in stable)
+	assert_string_contains(stable, "Ernie", "the personality stays")
+	var changing: String = mind.changing_prompt()
+	assert_string_starts_with(changing, "## Things you know for sure")
+	assert_string_contains(changing, "favourite thing about the ocean")
+	var before: String = mind.stable_prompt()
+	mind.notice("Ducks can sleep with one eye open, half the brain keeps watch. Do you nap?")
+	assert_eq(mind.stable_prompt(), before, "telling a fact or asking a question leaves the opening alone")
+
+
+func test_what_changes_goes_with_the_users_message_not_the_system_prompt() -> void:
+	var brain: Brain = Brain.new()
+	brain.mind = mind
+	var system: String = brain.system_prompt()
+	assert_false("## Things you know for sure" in system, "the system prompt stays the same turn to turn")
+	assert_string_contains(system, brain.sight_rules)
+	var history: Array[Dictionary] = [{"role": "system", "content": system}, {"role": "user", "content": "hi"}]
+	var content: String = Brain.with_screen(history, "", Brain.REMINDER, PackedStringArray(), mind.changing_prompt())[-1]["content"]
+	assert_string_contains(content, "## Things you know for sure")
+	assert_gt(content.find("## Things you know for sure"), content.find("The user says: hi"))
+	assert_string_ends_with(content, Brain.REMINDER, "the reminder still last")
+	brain.free()

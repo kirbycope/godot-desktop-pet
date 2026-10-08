@@ -36,6 +36,19 @@ func test_a_bigger_card_gets_a_bigger_model() -> void:
 	assert_eq(Brain.choose(prefs, models, variants, budgets(24.0, 64.0), "en", "")["chat"], "qwen2.5-14b")
 
 
+func test_a_mac_starts_at_the_7b_where_the_14b_would_fit() -> void:
+	# A 24 GB Mac: its unified memory fits the 14B, but reading the prompt is what keeps it quiet.
+	assert_eq(Brain.choose(prefs, models, variants, budgets(24.0, 24.0), "en", "", "macOS")["chat"], "qwen2.5-7b")
+	assert_eq(Brain.choose(prefs, models, variants, budgets(24.0, 24.0), "en", "", "Windows")["chat"], "qwen2.5-14b", "elsewhere the list is unchanged")
+	assert_eq(Brain.choose(prefs, models, variants, budgets(4.0, 4.0), "en", "", "macOS")["chat"], "qwen2.5-1.5b", "a small Mac still falls through to what fits")
+
+
+func test_an_empty_mac_list_uses_the_main_one() -> void:
+	prefs = prefs.duplicate()
+	prefs.mac_chat = PackedStringArray()
+	assert_eq(prefs.chat_for("macOS"), prefs.chat)
+
+
 func test_a_small_machine_gets_a_small_model() -> void:
 	assert_eq(Brain.choose(prefs, models, variants, budgets(4.0, 8.0), "en", "")["chat"], "qwen2.5-1.5b", "phi-4-mini (3.6 GB) does not fit")
 
