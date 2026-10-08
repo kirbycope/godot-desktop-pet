@@ -101,6 +101,8 @@ var _kept: PackedStringArray = PackedStringArray()
 var _said: PackedStringArray = PackedStringArray()
 var _questions: PackedStringArray = PackedStringArray()
 var _done: bool = true
+## Whether the sentence before was dropped, so one that leans on it ("That means...") goes too.
+var _dropped: bool = false
 ## How the last answer went, in milliseconds from the request: first_token, first_sentence, reply;
 ## and tokens, finish_reason, debugging. Shown on the Stats tab.
 var timings: Dictionary = {}
@@ -136,7 +138,7 @@ func note_said(text: String) -> void:
 	if not is_ready() or text.strip_edges().is_empty():
 		return
 	messages.append({"role": "assistant", "content": text})
-	messages = trimmed(messages, max_history)
+	messages = settled(messages, max_history)
 	if mind != null:
 		mind.record("assistant", text)
 
@@ -161,7 +163,7 @@ func ask(text: String, screen_text: String = "", web_text: String = "") -> void:
 	if not is_ready() or is_busy():
 		return
 	messages.append({"role": "user", "content": text})
-	messages = trimmed(messages, max_history)
+	messages = settled(messages, max_history)
 	# Debugging gets the rubber duck: a slim prompt and its reminder, no duck facts or jokes.
 	_debugging = is_debugging(text, earlier_user_line(messages), screen_text)
 	# The system prompt is rebuilt each time, so edits to its files and new memories count at once.
@@ -197,6 +199,7 @@ func ask(text: String, screen_text: String = "", web_text: String = "") -> void:
 	_raw = ""
 	_handled = 0
 	_kept = PackedStringArray()
+	_dropped = false
 	_done = false
 	_asked_at = Time.get_ticks_msec()
 	timings = {"debugging": _debugging}
@@ -462,6 +465,9 @@ func _take_sentences(last: bool) -> void:
 	while _handled < complete:
 		var kept: String = keep_sentence(all[_handled], _said, _questions)
 		_handled += 1
+		if not kept.is_empty() and _dropped and leans_on_the_last(kept):
+			kept = ""
+		_dropped = kept.is_empty()
 		if kept.is_empty():
 			continue
 		_kept.append(kept)
@@ -604,6 +610,11 @@ static func keep_sentence(text: String, said: PackedStringArray, questions: Pack
 	return Mind.without_repeats(text, said, questions)
 
 
+## Whether a sentence only makes sense after the one before it: "That means...", "So...".
+static func leans_on_the_last(sentence: String) -> bool:
+	return RegEx.create_from_string(r"(?i)^(that|this|these|those|so|which|because|it|they|then|also)\b").search(sentence.strip_edges()) != null
+
+
 ## Lower case, letters and spaces only, for comparing what was said.
 static func plain_words(text: String) -> String:
 	return RegEx.create_from_string(r"\s+").sub(RegEx.create_from_string(r"[^a-z\s]").sub(text.to_lower(), "", true), " ", true).strip_edges()
@@ -628,11 +639,12 @@ static func with_screen(history: Array[Dictionary], screen_text: String, reminde
 		return sent
 	var seen: String = screen_text.strip_edges()
 	var screen: String = "Text read from the user's screen by OCR:\n<<<\n%s\n>>>" % seen if not seen.is_empty() else "No text could be read from the user's screen."
-	# The hints go after the user's line, near the end, where a small model heeds them.
+	# The user's line goes last but for the reminder: a small model answers what it read most
+	# recently, and with facts or hints after the line it answered the turn before instead.
 	var checks: String = ""
 	if not hints.is_empty():
 		checks = "Things to check, from a quick look done in code. They may be wrong: check each against the code before you mention it.\n- %s\n\n" % "\n- ".join(hints)
-	sent[-1]["content"] = "%s\n\nThe user says: %s\n\n%s%s%s" % [screen, sent[-1]["content"], checks, notes + "\n\n" if not notes.is_empty() else "", reminder]
+	sent[-1]["content"] = "%s\n\n%s%sThe user says: %s\n\n%s" % [screen, notes + "\n\n" if not notes.is_empty() else "", checks, sent[-1]["content"], reminder]
 	return sent
 
 
@@ -742,6 +754,19 @@ static func parse_reply(json: String) -> String:
 static func parse_json(text: String) -> Variant:
 	var json: JSON = JSON.new()
 	return json.data if json.parse(text) == OK else null
+
+
+## The history kept for the next prompt. It grows to twice `keep` messages and is then cut back to
+## `keep`, rather than losing its oldest message every turn: a server that caches the opening of a
+## prompt (llama.cpp) then reuses everything up to the new message on most turns, and reads the
+## history again only when it is cut. After a cut it starts with one of the user's messages.
+static func settled(history: Array[Dictionary], keep: int) -> Array[Dictionary]:
+	if history.size() <= keep * 2 + 1:
+		return history
+	var kept: Array[Dictionary] = trimmed(history, keep)
+	while kept.size() > 2 and kept[1].get("role") != "user":
+		kept.remove_at(1)
+	return kept
 
 
 ## The system prompt plus the last `keep` messages.

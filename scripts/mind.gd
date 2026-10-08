@@ -33,6 +33,9 @@ signal out_of_facts(topic: String)
 @export var max_skills: int = 2
 ## What it searches the web for, in turn, when it has told every fact it knows.
 @export var fact_topics: PackedStringArray = ["surprising facts about ducks", "history of the rubber duck", "facts about mallard ducks", "facts about ducklings", "how ducks fly and migrate", "facts about duck feathers and swimming", "history of bath time", "Sesame Street history facts"]
+## How many of the facts still to tell go with each message: enough to pick from, few enough that
+## the message stays short (it is read afresh every turn).
+@export var facts_offered: int = 4
 ## How long to wait before searching again when a search for facts found none, in seconds.
 @export var fact_search_wait: float = 300.0
 
@@ -185,7 +188,7 @@ func stable_prompt() -> String:
 ## The part that changes nearly every message, so it goes last: the facts still to tell (one told
 ## is taken out, so it tells a new one) and the questions it asked lately.
 func changing_prompt() -> String:
-	var parts: PackedStringArray = PackedStringArray(["## Things you know for sure\n\n- " + "\n- ".join(untold_facts())])
+	var parts: PackedStringArray = PackedStringArray(["## Things you know for sure\n\n- " + "\n- ".join(untold_facts().slice(0, facts_offered))])
 	var recent_questions: PackedStringArray = asked()
 	if not recent_questions.is_empty():
 		parts.append("Questions you asked lately. Do not ask them again; ask about something new they said:\n- " + "\n- ".join(recent_questions))

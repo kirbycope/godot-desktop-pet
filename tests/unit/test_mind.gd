@@ -224,11 +224,13 @@ func test_the_personality_lists_its_facts() -> void:
 
 func test_a_told_fact_leaves_the_prompt_and_comes_back_when_all_are_told() -> void:
 	var listed: PackedStringArray = mind.facts()
-	var sleep_fact: String = Array(listed).filter(func(f: String) -> bool: return "one eye open" in f)[0]
-	assert_string_contains(mind.prompt(), sleep_fact)
-	mind.notice("Did you know that ducks can sleep with one eye open? Half their brain keeps watch!")
-	assert_has(mind.told(), sleep_fact)
-	assert_false(sleep_fact in mind.prompt(), "not offered again")
+	var toy_fact: String = mind.untold_facts()[0]
+	assert_string_contains(toy_fact, "28,800", "the first one offered")
+	assert_string_contains(mind.prompt(), toy_fact)
+	mind.notice("In 1992 a container ship in a Pacific storm lost 28,800 bath toys, and some floated to Alaska!")
+	assert_has(mind.told(), toy_fact)
+	assert_false(toy_fact in mind.prompt(), "not offered again")
+	assert_string_contains(mind.prompt(), mind.untold_facts()[3], "the next one moves up into the four")
 	for fact: String in listed:
 		mind.notice(fact)
 	assert_eq(mind.untold_facts().size(), listed.size(), "all told: the list starts over")
@@ -378,6 +380,11 @@ func test_what_changes_goes_with_the_users_message_not_the_system_prompt() -> vo
 	var history: Array[Dictionary] = [{"role": "system", "content": system}, {"role": "user", "content": "hi"}]
 	var content: String = Brain.with_screen(history, "", Brain.REMINDER, PackedStringArray(), mind.changing_prompt())[-1]["content"]
 	assert_string_contains(content, "## Things you know for sure")
-	assert_gt(content.find("## Things you know for sure"), content.find("The user says: hi"))
+	assert_lt(content.find("## Things you know for sure"), content.find("The user says: hi"), "their line last but for the reminder")
 	assert_string_ends_with(content, Brain.REMINDER, "the reminder still last")
 	brain.free()
+
+
+func test_only_a_few_facts_go_with_each_message() -> void:
+	var offered: String = mind.changing_prompt()
+	assert_eq(offered.count("\n- "), mind.facts_offered, "four of the eleven")

@@ -544,13 +544,27 @@ func _on_brain_replied(text: String) -> void:
 	if state != State.CHAT:
 		return
 	_spoken = text
-	if not _streamed:
-		# Nothing came as sentences, such as "my brain did not answer": say it whole.
-		bubble_text.scroll_to_line(0)
-		_say(text)
-	elif voice.is_speaking():
-		_scroll_along(text)
+	match after_answer(_streamed, voice.is_speaking()):
+		&"say":
+			# Nothing came as sentences, such as "my brain did not answer": say it whole.
+			bubble_text.scroll_to_line(0)
+			_say(text)
+		&"scroll":
+			_scroll_along(text)
+		&"listen":
+			_done_talking()
 	bubble_input.grab_focus()
+
+
+## What follows a whole answer: "say" it when none of it came as sentences, "scroll" along while
+## the voice is still saying them (its `finished` turns the mic back on), else "listen" again now.
+## The voice can finish the last sentence it was given while the model is still writing, and the
+## rest of the answer can turn out to be repeats that are never said; the mic used to stay off then,
+## since it is not turned back on while the duck is still thinking.
+static func after_answer(streamed: bool, speaking: bool) -> StringName:
+	if not streamed:
+		return &"say"
+	return &"scroll" if speaking else &"listen"
 
 
 func _on_test_pressed() -> void:

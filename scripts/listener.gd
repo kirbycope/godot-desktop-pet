@@ -22,8 +22,9 @@ var model_alias: String = ""
 @export var language: String = ""
 ## Louder than this is speech.
 @export var speech_threshold_db: float = -40.0
-## Quiet for this long ends the sentence and sends it.
-@export var pause_seconds: float = 0.6
+## Quiet for this long ends the sentence and sends it. At 0.6 s a pause to think mid-sentence sent
+## half of it ("He likes to float in more water and").
+@export var pause_seconds: float = 1.2
 ## Shorter bursts (a cough, a click) are dropped.
 @export var min_speech_seconds: float = 0.3
 @export var max_seconds: float = 30.0

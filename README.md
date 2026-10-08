@@ -275,10 +275,12 @@ you...`, `Writing it down...`, `Thinking...`, `Talking...`), with a level meter 
 hears you. The box comes back when the microphone is turned off.
 
 The microphone button turns on a conversation. The duck listens; when you talk it records, and
-when you have been quiet for `pause_seconds` (0.6 s) it writes down what you said and sends it,
+when you have been quiet for `pause_seconds` (1.2 s) it writes down what you said and sends it,
 with a look at the screen, exactly as if you had typed it. What it heard appears in the bubble as
 `You: ...` above the answer. While it thinks and talks it stops listening, so it does not hear
-itself, and it starts listening again as soon as it has finished speaking. Click the microphone
+itself, and it starts listening again as soon as it has finished speaking, or as soon as the
+answer is complete if the voice got there first. The pause was 0.6 s, which sent half a sentence
+whenever you stopped to think in the middle of one. Click the microphone
 again, or close the bubble, to stop.
 
 The microphone plays into a muted `Mic` bus (`default_bus_layout.tres`) whose `AudioEffectCapture`
@@ -513,7 +515,7 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Searcher`, `FactSearcher` | `max_results`, `max_snippet`, `search_urls` | 5 results, 300 characters each, Lite then HTML |
 | `Mind` | `fact_topics`, `fact_search_wait` | What it searches for new facts, in turn; 300 s before trying again after a search found none |
 | `Listener` | `language` | empty, so the system language |
-| `Listener` | `speech_threshold_db`, `pause_seconds` | -40 dB, 0.6 s |
+| `Listener` | `speech_threshold_db`, `pause_seconds` | -40 dB, 1.2 s |
 | `Squeak` | `stream` | the four squeaks, picked at random |
 
 ## Layout

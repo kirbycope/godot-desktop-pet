@@ -216,7 +216,7 @@ func test_hints_and_the_reminder_wrap_the_users_line() -> void:
 	var content: String = Brain.with_screen(history, "code", Brain.DEBUG_REMINDER, PackedStringArray(["`$Sprit` appears only here"]))[-1]["content"]
 	assert_string_contains(content, "Things to check, from a quick look done in code")
 	assert_string_contains(content, "- `$Sprit` appears only here")
-	assert_gt(content.find("Things to check"), content.find("The user says: why?"), "after their line, near the end")
+	assert_lt(content.find("Things to check"), content.find("The user says: why?"), "their line comes after, last but for the reminder")
 	assert_string_ends_with(content, Brain.DEBUG_REMINDER)
 	assert_eq(Brain.user_lines(history), "why?")
 
@@ -281,3 +281,20 @@ func test_a_short_line_said_word_for_word_before_is_dropped() -> void:
 	assert_eq(Brain.keep_sentence("Cool!", said, PackedStringArray()), "")
 	assert_eq(Brain.keep_sentence("I love pancakes.", said, PackedStringArray()), "I love pancakes.")
 	assert_eq(Brain.plain_words("Hi!  I love it, really."), "hi i love it really")
+
+
+func test_the_history_grows_then_is_cut_back_so_its_opening_stays_put() -> void:
+	var history: Array[Dictionary] = [{"role": "system", "content": "s"}]
+	for i: int in 12:
+		history.append({"role": "user" if i % 2 == 0 else "assistant", "content": str(i)})
+	assert_eq(Brain.settled(history, 6), history, "twelve is twice six: left alone")
+	history.append({"role": "user", "content": "12"})
+	var cut: Array[Dictionary] = Brain.settled(history, 6)
+	assert_eq(cut.map(func(m: Dictionary) -> String: return m["content"]), ["s", "8", "9", "10", "11", "12"], "cut back, starting with theirs")
+
+
+func test_a_sentence_leaning_on_a_dropped_one_goes_with_it() -> void:
+	assert_true(Brain.leans_on_the_last("That means raindrops look magical to them."))
+	assert_true(Brain.leans_on_the_last("So it never got a value."))
+	assert_false(Brain.leans_on_the_last("Rain is lovely."))
+	assert_false(Brain.leans_on_the_last("Thatcher was a prime minister."), "a whole word only")

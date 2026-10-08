@@ -212,6 +212,18 @@ func test_listening_comes_back_even_if_the_voice_never_says_it_finished() -> voi
 	assert_false('if state == State.CHAT and duck.animation == &"talk":\n\t\t_done_talking()' in source, "resuming does not hang on the animation")
 
 
+func test_listening_comes_back_when_the_voice_finished_before_the_answer() -> void:
+	assert_eq(Pet.after_answer(false, false), &"say", "nothing came as sentences: say it whole")
+	assert_eq(Pet.after_answer(true, true), &"scroll", "the voice's finished turns the mic back on")
+	assert_eq(Pet.after_answer(true, false), &"listen", "the voice is done and nothing more will be said: listen now")
+
+
+func test_a_pause_to_think_does_not_end_the_sentence() -> void:
+	var listener: Listener = load("res://scripts/listener.gd").new()
+	assert_gte(listener.pause_seconds, 1.0, "0.6 s sent half a sentence")
+	listener.free()
+
+
 func test_the_mic_has_a_red_dot_and_the_chat_a_status_line() -> void:
 	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
 	var dot: Panel = pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Mic/Dot")
