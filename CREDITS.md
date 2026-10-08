@@ -4,8 +4,11 @@ Third-party work in this repository: who made it, where it came from, its licenc
 
 | Folder | Asset | Author | License | Source |
 | --- | --- | --- | --- | --- |
-| `assets/duck` | Rubber Duck (`rubber_duck.fbx`) | Polygate2 | CGTrader Royalty Free License (no AI) | https://www.cgtrader.com/3d-models/architectural/other/rubber-duck-48c4668d-70d0-4753-8d1e-75541181ceb9 |
-| `assets/audio` | RubberDuckSqueak CRT2045701, cut into four squeaks (`duck_squeak_01.ogg` to `04`) | Audio Hero Inc. | Audio Hero End User License Agreement | https://download.audiohero.com/track/14678241 |
+| `assets/duck`, and rendered into `assets/icons/duck_icon.png` | Rubber Duck (`rubber_duck.fbx`) | Polygate2 | CGTrader Royalty Free License (no AI) | https://www.cgtrader.com/3d-models/architectural/other/rubber-duck-48c4668d-70d0-4753-8d1e-75541181ceb9 |
+| `assets/hat` | Captain Hat (`CaptainHat.FBX` and its four PBR textures) from Hat Pack 3 | Baria3DAsset | CGTrader Royalty Free License | CGTrader (bought by the author; the pack's listing link was not kept with the download) |
+| `assets/audio` | RubberDuckSqueak CRT2045701, cut into four squeaks (`duck_squeak_01.ogg` to `04`) and five quick ones for throws and bounces (`duck_squeak_fast_01.ogg` to `05`) | Audio Hero Inc. | Audio Hero End User License Agreement | https://download.audiohero.com/track/14678241 |
+| `assets/water/pond_water.gdshader` | The pond water: toon colours, Gerstner waves, contact and crest foam; adapted (its weather globals became plain uniforms, the stencil went, the contact foam measures from a footprint instead of the depth texture) | Antigravity Contributors, from weather-fx | MIT | https://github.com/kirbycope/weather-fx (`addons/weather_fx/resources/pond_water.gdshader`) |
+| `assets/water/bubbles.gdshader` | Bubble Shader, the rainbow-rimmed bubbles | Yui Kinomoto (@arlez80) | MIT | via godot-4.5-sandbox-3d (`scenes/props/bubble/`) |
 | `assets/icons` | `microphone.svg` from Mobile Controls 1.0 | Kenney | CC0 (`License.txt`) | https://kenney.nl |
 | `bin/windows/kokoro-server.exe` | Built from `tools/kokoro_server/kokoro_server.c` against sherpa-onnx's C API | this project; sherpa-onnx by k2-fsa | sherpa-onnx: Apache 2.0 | https://github.com/k2-fsa/sherpa-onnx |
 

@@ -19,3 +19,4 @@ build/
 # Verification captures from agent runs, local only.
 /screenshots/
 .mcp/
+/build/

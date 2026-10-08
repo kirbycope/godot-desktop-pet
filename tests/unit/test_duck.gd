@@ -145,3 +145,40 @@ func test_the_duck_scene_has_three_zs_hidden_until_it_sleeps() -> void:
 	duck._process(0.1)
 	for z: Label3D in duck.zzz:
 		assert_true(z.visible)
+
+
+func test_a_squeeze_starts_again_on_every_tap() -> void:
+	var duck: Duck = load("res://scenes/duck.tscn").instantiate()
+	add_child_autofree(duck)
+	duck.play(&"squeeze")
+	duck._time = 2.0
+	duck.play(&"squeeze")
+	assert_eq(duck._time, 2.0, "asked again, an animation carries on")
+	duck.play(&"squeeze", true)
+	assert_eq(duck._time, 0.0, "unless from the start")
+
+
+func test_the_captains_hat_is_optional_and_off_to_start() -> void:
+	var duck: Duck = load("res://scenes/duck.tscn").instantiate()
+	add_child_autofree(duck)
+	var hat: Node3D = duck.get_node("Pivot/Body/Yaw/Hat")
+	assert_false(hat.visible, "bare-headed until asked")
+	duck.hat = true
+	assert_true(hat.visible)
+	assert_almost_eq(hat.position.y, 0.207, 0.001, "on top of its head")
+	assert_almost_eq(hat.scale.x, 0.088, 0.001, "sized to the duck")
+	duck.hat = false
+	assert_false(hat.visible)
+
+
+func test_the_hat_stays_in_view_however_far_the_duck_stretches() -> void:
+	# The hat's crown is 0.269 m above the duck's base; falling stretches it 1.22 times and lifts it
+	# 0.06 m, the furthest any move takes it.
+	var duck: Duck = load("res://scenes/duck.tscn").instantiate()
+	var camera: Camera3D = duck.get_node("Camera")
+	var top: float = camera.position.y + camera.size / 2.0
+	var base: float = (duck.get_node("Pivot") as Node3D).position.y + Duck.BASE.y
+	assert_almost_eq(camera.position.y - camera.size / 2.0, base - 0.002, 0.0005, "feet on the edge")
+	assert_gt(top - base, 0.269 * 1.22 + 0.06, "the hat's crown fits a fall")
+	assert_almost_eq(camera.size / 176.0, 0.34 / 144.0, 0.000001, "the duck no bigger on screen")
+	duck.free()

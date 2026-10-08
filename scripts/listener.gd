@@ -10,6 +10,11 @@ extends Node
 
 ## A sentence was transcribed; "" when nothing intelligible was said.
 signal heard(text: String)
+## A sentence the phone recorded was transcribed (see `transcribe_wav`); "" when nothing was heard.
+signal heard_from_phone(text: String)
+## With `hand_off` on, a sentence ready to transcribe, as a 16 kHz WAV, for something else to
+## transcribe: the phone app sends it to the PC.
+signal wav_ready(wav: PackedByteArray)
 signal mode_changed(mode: Mode)
 ## The microphone's level in decibels, as it is heard, for a meter.
 signal level_changed(db: float)
@@ -30,6 +35,9 @@ var model_alias: String = ""
 @export var max_seconds: float = 30.0
 ## Audio kept from just before the level rose, so the first syllable is not cut off.
 @export var preroll_seconds: float = 0.3
+## Hand each sentence over through `wav_ready` instead of transcribing it here: the phone app, which
+## has no speech model, has the PC transcribe it. It waits, paused, until `resume`.
+@export var hand_off: bool = false
 
 const BUS: StringName = &"Mic"
 const RATE: int = 16000
@@ -49,6 +57,8 @@ var _voiced: float = 0.0
 var _silence: float = 0.0
 var _model_fetched: bool = false
 var _thread: Thread = Thread.new()
+## Whether the transcription running is the phone's, so its text goes to `heard_from_phone`.
+var _from_phone: bool = false
 
 @onready var mic: AudioStreamPlayer = $Mic
 
@@ -90,7 +100,8 @@ func is_supported() -> bool:
 
 
 func start() -> void:
-	if mode != Mode.OFF or not is_supported() or model_alias.is_empty():
+	# A listener that hands its sentences over (the phone's) needs no speech model of its own.
+	if mode != Mode.OFF or not is_supported() or (model_alias.is_empty() and not hand_off):
 		return
 	_capture.clear_buffer()
 	_samples.clear()
@@ -102,6 +113,19 @@ func stop() -> void:
 	mic.stop()
 	_samples.clear()
 	mode = Mode.OFF
+
+
+## Turns the mic off, but a sentence it is in the middle of hearing still goes to be written down,
+## as though you had paused: you said it, so it is sent. True when there was one to send.
+func finish() -> bool:
+	var speaking: bool = mode == Mode.HEARING and _voiced >= min_speech_seconds
+	if speaking:
+		_transcribe(AudioServer.get_mix_rate())
+	mic.stop()
+	_samples.clear()
+	# Off, but a transcription under way still ends in `heard` (or `wav_ready` has gone already).
+	mode = Mode.OFF
+	return speaking
 
 
 ## Stops listening for a while (the duck is thinking or talking) without turning the mic off.
@@ -158,10 +182,15 @@ func _process(_delta: float) -> void:
 
 
 func _transcribe(mix_rate: float) -> void:
-	var file: FileAccess = FileAccess.open(WAV_PATH, FileAccess.WRITE)
-	file.store_buffer(to_wav(resample(_samples, mix_rate, RATE), RATE))
-	file.close()
+	var wav: PackedByteArray = to_wav(resample(_samples, mix_rate, RATE), RATE)
 	_samples.clear()
+	if hand_off:
+		mode = Mode.PAUSED
+		wav_ready.emit(wav)
+		return
+	var file: FileAccess = FileAccess.open(WAV_PATH, FileAccess.WRITE)
+	file.store_buffer(wav)
+	file.close()
 	mode = Mode.TRANSCRIBING
 	if _thread.is_started():
 		_thread.wait_to_finish()
@@ -184,9 +213,28 @@ func _run() -> void:
 func _finish(text: String, error: String) -> void:
 	_thread.wait_to_finish()
 	last_error = error
+	if _from_phone:
+		_from_phone = false
+		heard_from_phone.emit(text)
+		return
 	if mode == Mode.TRANSCRIBING:
 		mode = Mode.PAUSED
 	heard.emit(text)
+
+
+## Transcribes a sentence the phone recorded, `wav` as `to_wav` makes it; the text arrives through
+## `heard_from_phone`. False when a transcription is already running, or there is no speech model.
+func transcribe_wav(wav: PackedByteArray) -> bool:
+	if _thread.is_started() and _thread.is_alive() or model_alias.is_empty() or wav.is_empty():
+		return false
+	if _thread.is_started():
+		_thread.wait_to_finish()
+	var file: FileAccess = FileAccess.open(WAV_PATH, FileAccess.WRITE)
+	file.store_buffer(wav)
+	file.close()
+	_from_phone = true
+	_thread.start(_run)
+	return true
 
 
 func _set_mode(value: Mode) -> void:

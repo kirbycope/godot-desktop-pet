@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/duck.gd" id="1"]
 [ext_resource type="PackedScene" path="res://assets/duck/rubber_duck.fbx" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/hat.tscn" id="3"]
 
 [sub_resource type="Environment" id="Environment_duck"]
 background_mode = 1
@@ -13,14 +14,19 @@ ambient_light_energy = 0.7
 script = ExtResource("1")
 
 [node name="Pivot" type="Node3D" parent="."]
+position = Vector3(0, 0.037778, 0)
 
 [node name="Body" type="Node3D" parent="Pivot"]
-position = Vector3(0, -0.168, 0)
+position = Vector3(0, -0.205778, 0)
 
 [node name="Yaw" type="Node3D" parent="Pivot/Body"]
 transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, 0, 0, 0)
 
 [node name="Model" parent="Pivot/Body/Yaw" instance=ExtResource("2")]
+
+[node name="Hat" parent="Pivot/Body/Yaw" instance=ExtResource("3")]
+visible = false
+transform = Transform3D(-3.809167e-09, 5.3534355e-10, 0.088, 0.012247234, 0.087143585, 0, -0.087143585, 0.012247234, -3.846602e-09, 0.008, 0.207, 0)
 
 [node name="Zzz" type="Node3D" parent="."]
 
@@ -58,9 +64,9 @@ font_size = 36
 outline_size = 10
 
 [node name="Camera" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.037778, 1)
 projection = 1
-size = 0.34
+size = 0.415556
 near = 0.05
 far = 3.0
 

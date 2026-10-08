@@ -176,28 +176,56 @@ func test_the_model_cannot_remember_small_talk() -> void:
 	assert_eq(mind.memories(), PackedStringArray(["The user works nights"]))
 
 
-func test_every_line_goes_into_todays_conversation_log() -> void:
+func test_every_line_goes_into_the_conversation_under_way() -> void:
 	mind.record("user", "I had pancakes\nfor breakfast.")
 	mind.record("assistant", "Pancakes! Ooh, with syrup?")
-	var today: String = ROOT.path_join("conversations").path_join(Time.get_date_string_from_system() + ".md")
-	assert_true(FileAccess.file_exists(today))
-	var text: String = FileAccess.get_file_as_string(today)
+	var file: String = ROOT.path_join("conversations").path_join(mind.conversation_id() + ".md")
+	assert_true(FileAccess.file_exists(file))
+	var text: String = FileAccess.get_file_as_string(file)
 	assert_string_contains(text, "**You:** I had pancakes for breakfast.")
 	assert_string_contains(text, "**Duck:** Pancakes! Ooh, with syrup?")
 
 
-func test_the_last_exchanges_come_back_oldest_first_across_days() -> void:
+func _log(id: String, lines: Array) -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(ROOT.path_join("conversations")))
-	var yesterday: FileAccess = FileAccess.open(ROOT.path_join("conversations/2026-10-06.md"), FileAccess.WRITE)
-	yesterday.store_string(Mind.log_line("user", "one", "10:00:00") + Mind.log_line("assistant", "two", "10:00:01") + Mind.log_line("user", "three", "10:00:02"))
-	yesterday.close()
-	var today: FileAccess = FileAccess.open(ROOT.path_join("conversations/2026-10-07.md"), FileAccess.WRITE)
-	today.store_string(Mind.log_line("assistant", "four", "09:00:00") + Mind.log_line("user", "five", "09:00:01"))
-	today.close()
-	var last: Array[Dictionary] = mind.recent(4)
-	assert_eq(last.map(func(m: Dictionary) -> String: return m["content"]), ["two", "three", "four", "five"])
-	assert_eq(last[0]["role"], "assistant")
-	assert_eq(last[3]["role"], "user")
+	var file: FileAccess = FileAccess.open(ROOT.path_join("conversations/%s.md" % id), FileAccess.WRITE)
+	for line: Array in lines:
+		file.store_string(Mind.log_line(line[0], line[1], "10:00:00"))
+	file.close()
+
+
+func test_the_last_exchanges_come_from_the_conversation_under_way_only() -> void:
+	_log("2026-10-06", [["user", "one"], ["assistant", "two"]])
+	_log("2026-10-07", [["user", "three"], ["assistant", "four"], ["user", "five"]])
+	assert_eq(mind.conversation_id(), "2026-10-07", "with none chosen, the newest")
+	var last: Array[Dictionary] = mind.recent(2)
+	assert_eq(last.map(func(m: Dictionary) -> String: return m["content"]), ["four", "five"], "not spilling into the day before")
+	assert_eq(last[1]["role"], "user")
+
+
+func test_a_new_conversation_starts_empty_and_the_old_ones_stay() -> void:
+	_log("2026-10-07", [["user", "Do you have any grapes?"], ["assistant", "No grapes, just feathers!"]])
+	var id: String = mind.new_conversation()
+	assert_eq(mind.conversation_id(), id)
+	assert_eq(mind.recent(6), [] as Array[Dictionary], "nothing said in it yet")
+	mind.record("user", "Good morning, Ducky.")
+	var listed: Array[Dictionary] = mind.conversations()
+	assert_eq(listed.size(), 2)
+	assert_eq(listed[0]["id"], id, "newest first")
+	assert_eq(listed[0]["title"], "Good morning, Ducky.", "titled by what you said first")
+	assert_eq(listed[1]["title"], "Do you have any grapes?")
+	assert_true(mind.open_conversation("2026-10-07"))
+	assert_eq(mind.recent(6).size(), 2, "back where it left off")
+	assert_false(mind.open_conversation("2020-01-01"), "no such conversation")
+	assert_eq(mind.conversation_id(), "2026-10-07")
+
+
+func test_conversation_names_sort_by_when_they_began() -> void:
+	assert_eq(Mind.conversation_name({"year": 2026, "month": 10, "day": 8, "hour": 6, "minute": 45, "second": 12}), "2026-10-08_064512")
+	assert_eq(Mind.conversation_when("2026-10-08_064512"), "2026-10-08 06:45")
+	assert_eq(Mind.conversation_when("2026-10-07"), "2026-10-07", "a day's log from before")
+	assert_lt("2026-10-07", "2026-10-08_064512", "the day's log sorts before the next day's conversations")
+	assert_eq(Mind.conversation_title([] as Array[Dictionary]), "(nothing said yet)")
 
 
 func test_a_log_line_reads_back_as_the_same_message() -> void:

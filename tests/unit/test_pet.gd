@@ -158,6 +158,20 @@ func test_hit_outline_turns_with_the_duck() -> void:
 	assert_almost_eq(right_most, 142.0, 0.01, "on the right wall it hugs the right side")
 
 
+func test_the_hit_outline_reaches_over_the_hat() -> void:
+	# On Windows nothing outside it is drawn, so it must cover the hat; its base stays put.
+	var bare: PackedVector2Array = Pet.hit_outline(Vector2(176, 176), Vector2(124, 108), Vector2(0, 32), 0.0)
+	var hat: PackedVector2Array = Pet.hit_outline(Vector2(176, 176), Vector2(124, 108), Vector2(0, 32), 0.0, 60.0)
+	assert_almost_eq(hat[0].y, bare[0].y - 60.0, 0.01, "60 px higher")
+	assert_almost_eq(hat[2].y, bare[2].y, 0.01, "the base where it was")
+	assert_almost_eq(hat[0].y, 6.0, 0.01, "6 px from the top, above a falling duck's crown at 11")
+	var ceiling: PackedVector2Array = Pet.hit_outline(Vector2(176, 176), Vector2(124, 108), Vector2(0, 32), 180.0, 60.0)
+	var lowest: float = -INF
+	for point: Vector2 in ceiling:
+		lowest = maxf(lowest, point.y)
+	assert_almost_eq(lowest, 170.0, 0.01, "upside down on the ceiling the hat hangs towards the floor")
+
+
 func test_a_click_squeaks_one_of_four_sounds() -> void:
 	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
 	var randomizer: AudioStreamRandomizer = (pet.get_node("Squeak") as AudioStreamPlayer).stream as AudioStreamRandomizer
@@ -358,3 +372,35 @@ func test_a_screen_read_ahead_is_used_only_while_fresh() -> void:
 	for i: int in state.get_connection_count():
 		methods.append(state.get_connection_method(i))
 	assert_has(methods, "_on_input_text_changed", "typing starts the read")
+
+
+func test_a_line_from_the_phone_waits_for_the_brain() -> void:
+	var pet: Pet = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
+	assert_false(pet.send_remote("hello", true), "asleep: refused, so the phone is told it is busy")
+	assert_false(pet._quiet, "and nothing left set for the next turn")
+	pet.free()
+
+
+func test_the_hat_choice_is_kept() -> void:
+	var path: String = "user://test_hat.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	assert_false(Pet.load_hat(path), "off when never chosen")
+	Pet.save_hat(path, true)
+	assert_true(Pet.load_hat(path))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var state: SceneState = (load("res://scenes/pet.tscn") as PackedScene).get_state()
+	var methods: PackedStringArray = PackedStringArray()
+	for i: int in state.get_connection_count():
+		methods.append(state.get_connection_method(i))
+	assert_has(methods, "_on_hat_toggled", "the Duck tab's checkbox")
+	assert_has(methods, "_on_pet_hat_changed", "and the phone hears of it")
+
+
+func test_throws_and_bounces_squeak_quickly_one_of_five() -> void:
+	for scene: String in ["res://scenes/pet.tscn", "res://scenes/remote.tscn"]:
+		var node: Node = (load(scene) as PackedScene).instantiate()
+		var fast: AudioStreamRandomizer = (node.get_node("FastSqueak") as AudioStreamPlayer).stream
+		assert_eq(fast.streams_count, 5, scene)
+		for i: int in fast.streams_count:
+			assert_true(fast.get_stream(i).resource_path.contains("duck_squeak_fast_0%d" % (i + 1)))
+		node.free()

@@ -87,3 +87,56 @@ func test_settings_offer_a_microphone_choice() -> void:
 		methods.append(state.get_connection_method(i))
 	assert_has(methods, "_on_mic_selected")
 	pet.free()
+
+
+func test_on_the_phone_a_sentence_is_handed_over_not_transcribed() -> void:
+	var listener: Listener = load("res://scripts/listener.gd").new()
+	listener.hand_off = true
+	watch_signals(listener)
+	listener._samples = PackedFloat32Array([0.0, 0.5, -0.5, 0.25])
+	listener._transcribe(16000.0)
+	assert_signal_emitted(listener, "wav_ready")
+	var wav: PackedByteArray = get_signal_parameters(listener, "wav_ready")[0]
+	assert_eq(wav.slice(0, 4).get_string_from_ascii(), "RIFF", "a WAV")
+	assert_eq(listener.mode, Listener.Mode.PAUSED, "waits for the answer")
+	listener.free()
+
+
+func test_turning_the_mic_off_mid_sentence_sends_it() -> void:
+	var listener: Listener = load("res://scripts/listener.gd").new()
+	var mic: AudioStreamPlayer = AudioStreamPlayer.new()
+	mic.name = "Mic"
+	listener.add_child(mic)
+	listener.hand_off = true
+	add_child_autofree(listener)
+	watch_signals(listener)
+	listener.mode = Listener.Mode.HEARING
+	listener._voiced = listener.min_speech_seconds
+	listener._samples = PackedFloat32Array([0.0, 0.5, -0.5, 0.25])
+	assert_true(listener.finish(), "there was a sentence")
+	assert_signal_emitted(listener, "wav_ready", "it went to be written down")
+	assert_eq(listener.mode, Listener.Mode.OFF, "and the mic is off")
+	listener.mode = Listener.Mode.HEARING
+	listener._voiced = 0.0
+	assert_false(listener.finish(), "a cough is not a sentence")
+	assert_signal_emit_count(listener, "wav_ready", 1)
+	listener.mode = Listener.Mode.WAITING
+	assert_false(listener.finish(), "nor is silence")
+
+
+func test_a_phone_recording_needs_a_speech_model_and_some_sound() -> void:
+	var listener: Listener = load("res://scripts/listener.gd").new()
+	assert_false(listener.transcribe_wav(PackedByteArray([1, 2, 3])), "no speech model chosen yet")
+	listener.model_alias = "parakeet-tdt-0.6b-v2"
+	assert_false(listener.transcribe_wav(PackedByteArray()), "nothing to transcribe")
+	listener.free()
+
+
+func test_the_phone_listens_without_a_speech_model_of_its_own() -> void:
+	var app: Node = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
+	var listener: Listener = app.get_node("Listener")
+	add_child_autofree(app)
+	assert_true(listener.model_alias.is_empty(), "the phone has none")
+	listener.start()
+	assert_eq(listener.mode, Listener.Mode.WAITING, "it listens anyway: the PC writes its sentences down")
+	listener.stop()

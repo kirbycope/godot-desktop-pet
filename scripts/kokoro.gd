@@ -20,6 +20,8 @@ signal install_failed(message: String)
 signal started
 ## A line finished playing. Not sent when it was stopped.
 signal finished
+## A line asked for with `render` is ready to send elsewhere: its WAV, empty when synthesis failed.
+signal rendered(tag: int, wav: PackedByteArray)
 
 const ROOT: String = "user://kokoro"
 const MODEL_FOLDER: String = "kokoro-multi-lang-v1_0"
@@ -216,6 +218,40 @@ func add(text: String, sid: int) -> void:
 	else:
 		var command: PackedStringArray = args(ProjectSettings.globalize_path(model_path()), sid, text, wav, threads)
 		WorkerThreadPool.add_task(_synthesize.bind(ProjectSettings.globalize_path(exe_path()), command, wav, _batch, index))
+
+
+## Synthesises `text` without playing it, for the phone: the WAV's bytes arrive through `rendered`
+## with `tag`, empty when it failed. Shares kokoro-server with what is said here, one line at a time.
+func render(text: String, sid: int, tag: int) -> void:
+	if not is_installed() or sid < 0 or sid >= VOICES.size() or text.strip_edges().is_empty():
+		rendered.emit.call_deferred(tag, PackedByteArray())
+		return
+	var wav: String = ProjectSettings.globalize_path(ROOT.path_join("phone_%d.wav" % (tag % 8)))
+	if _start_server():
+		WorkerThreadPool.add_task(_render_with_server.bind(request(sid, text, wav), wav, tag))
+	else:
+		var command: PackedStringArray = args(ProjectSettings.globalize_path(model_path()), sid, text, wav, threads)
+		WorkerThreadPool.add_task(_render_with_tool.bind(ProjectSettings.globalize_path(exe_path()), command, wav, tag))
+
+
+func _render_with_server(line_text: String, wav: String, tag: int) -> void:
+	_server_lock.lock()
+	var pipe: FileAccess = _server.get("stdio")
+	var answer: String = ""
+	if pipe != null and pipe.is_open():
+		pipe.store_line(line_text)
+		pipe.flush()
+		answer = pipe.get_line().strip_edges()
+	_server_lock.unlock()
+	_rendered.call_deferred(wav, tag, answer == "ok")
+
+
+func _render_with_tool(exe: String, command: PackedStringArray, wav: String, tag: int) -> void:
+	_rendered.call_deferred(wav, tag, OS.execute(exe, command) == 0)
+
+
+func _rendered(wav: String, tag: int, ok: bool) -> void:
+	rendered.emit(tag, FileAccess.get_file_as_bytes(wav) if ok else PackedByteArray())
 
 
 ## Loads the model in the background ahead of the first line, so that line comes quickly.

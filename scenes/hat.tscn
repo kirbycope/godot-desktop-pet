@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://dfxnb55e68ubc"]
+
+[ext_resource type="PackedScene" uid="uid://cuq4gw33vy8vn" path="res://assets/hat/CaptainHat.FBX" id="1"]
+[ext_resource type="Texture2D" uid="uid://dm13hq082o3jr" path="res://assets/hat/CaptainHat_BaseColor.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://ckn8lrirdu5sr" path="res://assets/hat/CaptainHat_Normal.png" id="3"]
+[ext_resource type="Texture2D" uid="uid://b3nnlvxakp866" path="res://assets/hat/CaptainHat_Metallic.png" id="4"]
+[ext_resource type="Texture2D" uid="uid://b4jg52w30un25" path="res://assets/hat/CaptainHat_Roughness.png" id="5"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hat"]
+albedo_texture = ExtResource("2")
+metallic = 1.0
+metallic_texture = ExtResource("4")
+roughness_texture = ExtResource("5")
+normal_enabled = true
+normal_texture = ExtResource("3")
+
+[node name="Hat" type="Node3D" unique_id=1607321143]
+
+[node name="CaptainHat" parent="." unique_id=1598125088 instance=ExtResource("1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.1)
+
+[node name="CaptainHat" parent="CaptainHat" index="0" unique_id=1246560633]
+material_override = SubResource("StandardMaterial3D_hat")
+
+[editable path="CaptainHat"]

@@ -11,6 +11,9 @@ signal status_changed(text: String)
 signal sentence(text: String)
 ## The whole answer, after the last sentence.
 signal replied(text: String)
+## A new conversation began, or an old one was taken up again: what the duck has in mind is that
+## conversation's last exchanges now.
+signal conversation_changed(id: String)
 ## Facts pulled out of web search results by `learn_facts`.
 signal facts_found(facts: PackedStringArray)
 
@@ -66,6 +69,8 @@ const REMINDER: String = "(Answer in character in two to four short sentences: a
 const DEBUG_REMINDER: String = "(They are working on code, so be their rubber duck: no duck facts, stories or jokes this turn. In two or three short sentences, go through it step by step, name the line or step that looks wrong and say why in plain words, then ask one short question that helps them check it. If nothing looks wrong, ask what they expected to happen and what happened instead. It is read aloud, so no lists, headings or code blocks: quote a few words of code inline at most.)"
 ## Words and marks that say a line is about code or a bug.
 const DEBUG_WORDS: String = r"(?i)\b(bugs?|crash\w*|errors?|exceptions?|traceback|broken|wrong|fix|debug\w*|stuck|doesn'?t work|does not work|not working|null|undefined|compil\w*|code|function|script|returns?)\b|\w\(\)|\w\.\w+\(|==|!=|[{};]"
+## How long after a debugging message the next one still counts as part of it, in ms.
+const DEBUG_THREAD_MS: int = 5 * 60 * 1000
 
 ## How long a model may take to load before the duck gives up and says so.
 const LOAD_TIMEOUT_SECONDS: int = 600
@@ -110,6 +115,9 @@ var _asked_at: int = 0
 ## The error being worked on, kept while the conversation stays on it, so it is not lost when the
 ## user switches windows to explain.
 var _thread_error: String = ""
+## When the last debugging message came, in ms; the one after it carries on debugging only if it
+## comes within DEBUG_THREAD_MS. -1 when there has been none since the duck started.
+var _debug_at: int = -1
 
 @onready var models_request: HTTPRequest = $ModelsRequest
 @onready var chat_stream: ChatStream = $ChatStream
@@ -153,7 +161,32 @@ func foundry_path() -> String:
 
 
 func is_busy() -> bool:
-	return chat_stream.is_busy()
+	return chat_stream != null and chat_stream.is_busy()
+
+
+## Starts a new conversation: the duck keeps its memories and personality, but what was said before
+## is no longer in mind. False while it is answering.
+func new_conversation() -> bool:
+	if mind == null or is_busy():
+		return false
+	_take_up(mind.new_conversation())
+	return true
+
+
+## Takes conversation `id` up again where it left off. False while answering, or with no such one.
+func open_conversation(id: String) -> bool:
+	if mind == null or is_busy() or not mind.open_conversation(id):
+		return false
+	_take_up(id)
+	return true
+
+
+func _take_up(id: String) -> void:
+	messages = [{"role": "system", "content": system_prompt()}]
+	messages.append_array(mind.recent(max_history))
+	_thread_error = ""
+	_debug_at = -1
+	conversation_changed.emit(id)
 
 
 ## Sends the user's line with the text read off the screen, and the web results when it asked for a
@@ -165,7 +198,13 @@ func ask(text: String, screen_text: String = "", web_text: String = "") -> void:
 	messages.append({"role": "user", "content": text})
 	messages = settled(messages, max_history)
 	# Debugging gets the rubber duck: a slim prompt and its reminder, no duck facts or jokes.
-	_debugging = is_debugging(text, earlier_user_line(messages), screen_text)
+	# The message before counts only if it was a few minutes ago: "good morning" the next day is
+	# not part of last night's bug.
+	var now: int = Time.get_ticks_msec()
+	var recent: bool = _debug_at >= 0 and now - _debug_at <= DEBUG_THREAD_MS
+	_debugging = is_debugging(text, earlier_user_line(messages) if recent else "", screen_text)
+	if _debugging:
+		_debug_at = now
 	# The system prompt is rebuilt each time, so edits to its files and new memories count at once.
 	messages[0] = {"role": "system", "content": system_prompt(_debugging)}
 	var skills: Array[Dictionary] = mind.skills_for(text + "\n" + screen_text) if mind != null else ([] as Array[Dictionary])
@@ -672,7 +711,12 @@ static func user_lines(history: Array[Dictionary]) -> String:
 ## conversation stays one while they explain.
 static func is_debugging(line: String, earlier_line: String, screen_text: String) -> bool:
 	var about_code: RegEx = RegEx.create_from_string(DEBUG_WORDS)
-	if about_code.search(line) != null or about_code.search(earlier_line) != null:
+	if about_code.search(line) != null:
+		return true
+	# A greeting or a thank-you ends a debugging conversation rather than continuing it.
+	if RegEx.create_from_string(r"(?i)^\W*(hi|hello|hey|hiya|morning|good (morning|afternoon|evening|night)|thanks|thank you|cheers|bye|goodbye|night)\b").search(line) != null:
+		return false
+	if about_code.search(earlier_line) != null:
 		return true
 	var pointing: bool = RegEx.create_from_string(r"(?i)\b(this|here|that|screen|it)\b").search(line) != null
 	return pointing and RegEx.create_from_string(r"(?i)error|exception|traceback|uncaught|null instance|undefined|failed").search(screen_text) != null

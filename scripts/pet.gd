@@ -11,6 +11,13 @@ extends Node2D
 enum Edge { BOTTOM, RIGHT, TOP, LEFT }
 enum State { WALK, IDLE, DRAG, FALL, CHAT, SLEEP }
 
+## A line is on its way to the brain, typed, spoken or from the phone.
+signal turn_started(line: String)
+## The whole answer, with what the duck remembered or learned on the way ("" if nothing).
+signal answered(text: String, notes: String)
+## The captain's hat went on or came off, here or from the phone.
+signal hat_changed(on: bool)
+
 @export var speed: float = 60.0
 ## Pixels a second squared pulling the duck down when it is dropped or thrown.
 @export var gravity: float = 2600.0
@@ -20,7 +27,7 @@ enum State { WALK, IDLE, DRAG, FALL, CHAT, SLEEP }
 @export var floor_friction: float = 4.0
 ## The fastest it can be thrown, in pixels a second.
 @export var max_throw_speed: float = 4500.0
-## A bounce faster than this squashes it and squeaks.
+## A bounce faster than this squashes it and squeaks; a throw faster than this squeaks as it goes.
 @export var hard_bounce: float = 650.0
 ## Chance of stopping for a rest at a bottom corner, as in the original project.
 @export_range(0.0, 1.0) var idle_chance: float = 0.3
@@ -31,7 +38,14 @@ enum State { WALK, IDLE, DRAG, FALL, CHAT, SLEEP }
 ## The part of the window that takes the mouse, standing on the floor: its size, and its centre's
 ## offset from the window's centre. It turns with the duck on the walls and the ceiling.
 @export var hit_size: Vector2 = Vector2(124, 108)
-@export var hit_offset: Vector2 = Vector2(0, 16)
+@export var hit_offset: Vector2 = Vector2(0, 32)
+## Empty window above the duck's head on the floor, kept for the hat and for stretching; the bubble
+## overlaps it rather than floating that far above the duck.
+@export var headroom: float = 32.0
+## How much higher the part that takes the mouse reaches while the duck wears its hat. On Windows
+## nothing outside that part is drawn either, so it has to cover the hat however far the duck
+## stretches: 60 px takes it to 6 px from the window's top, past the crown of a falling duck at 11.
+@export var hat_reach: float = 60.0
 ## Said aloud and shown when the bubble opens; one is picked at random each time.
 @export var greetings: Array[String] = [
 	"Quack! Hi there!", "Oh, hello! How's it going?", "Hi! What's up?", "Quack quack! Good to see you.",
@@ -41,6 +55,9 @@ enum State { WALK, IDLE, DRAG, FALL, CHAT, SLEEP }
 ]
 ## What the Test button says in the voice being tried.
 @export var test_line: String = "Quack! I'm your rubber duck. Is this how you want me to sound?"
+## Where the hat is kept, beside the chosen voice and microphone.
+const SETTINGS_PATH: String = "user://settings.cfg"
+
 ## The screen is read as the user starts typing or speaking; at Send that reading is used if it is
 ## at most this many milliseconds old, so Send does not wait on OCR.
 @export var read_ahead_ms: int = 3000
@@ -77,6 +94,8 @@ var _pending_line: String = ""
 var _web_text: String = ""
 ## The last line sent, kept above the answer so you can see what the duck was asked.
 var _last_line: String = ""
+## The turn under way came from the phone, which speaks it, so the duck here stays quiet.
+var _quiet: bool = false
 ## Said once the squeak has finished.
 var _greeting: String = ""
 ## What the duck remembered or learned since the last answer, shown under the next one.
@@ -93,6 +112,8 @@ var _scroll_tween: Tween
 @onready var searcher: Searcher = $Searcher
 @onready var listener: Listener = $Listener
 @onready var squeak: AudioStreamPlayer = $Squeak
+## Quick squeaks, one of five, for a throw and a hard bounce.
+@onready var fast_squeak: AudioStreamPlayer = $FastSqueak
 @onready var bubble: Window = $Bubble
 @onready var tabs: TabContainer = $Bubble/Panel/Margin/Tabs
 @onready var bubble_text: RichTextLabel = $Bubble/Panel/Margin/Tabs/Chat/Text
@@ -114,6 +135,7 @@ var _scroll_tween: Tween
 @onready var mind: Mind = $Mind
 @onready var name_field: LineEdit = $Bubble/Panel/Margin/Tabs/Duck/NameRow/Name
 @onready var memory_list: ItemList = $Bubble/Panel/Margin/Tabs/Duck/Memories
+@onready var hat_box: CheckBox = $Bubble/Panel/Margin/Tabs/Duck/HatRow/Hat
 @onready var menu: PopupMenu = $Menu
 
 
@@ -126,6 +148,7 @@ func _ready() -> void:
 	_fill_voices()
 	_fill_mics()
 	_fill_mind()
+	set_hat(load_hat(SETTINGS_PATH))
 	_update_stats()
 
 
@@ -171,6 +194,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			# Let go mid-swing and it keeps the mouse's speed: a gentle drop or a proper yeet.
 			velocity = throw_velocity(_drag_trail, max_throw_speed)
 			_spin = velocity.x * 0.25
+			if velocity.length() > hard_bounce:
+				fast_squeak.play()
 			state = State.FALL
 
 
@@ -211,7 +236,7 @@ func _fly(delta: float) -> void:
 	duck.roll = fmod(duck.roll + _spin * delta, 360.0)
 	if step["impact"] > hard_bounce:
 		duck.play(&"land")
-		squeak.play()
+		fast_squeak.play()
 	elif duck.animation == &"land" and not step["resting"]:
 		duck.play(&"fall")
 	if step["resting"]:
@@ -238,7 +263,12 @@ func _play_for_edge() -> void:
 ## mouse; clicks on the empty rest of the window go through to the desktop.
 func _stand_on(on_edge: Edge) -> void:
 	duck.roll = roll_for(on_edge)
-	DisplayServer.window_set_mouse_passthrough(hit_outline(window_size(), hit_size, hit_offset, duck.roll))
+	_update_passthrough()
+
+
+func _update_passthrough() -> void:
+	var reach: float = hat_reach if duck.hat else 0.0
+	DisplayServer.window_set_mouse_passthrough(hit_outline(window_size(), hit_size, hit_offset, duck.roll, reach))
 
 
 func _set_state(value: State) -> void:
@@ -292,7 +322,7 @@ func _open_bubble() -> void:
 		squeak.play()
 	var area: Rect2 = usable_area()
 	var size: Vector2 = Vector2(bubble.size)
-	var above: float = screen_position.y - size.y
+	var above: float = screen_position.y + headroom - size.y
 	var at: Vector2 = Vector2(screen_position.x + (window_size().x - size.x) / 2.0, above if above >= area.position.y else screen_position.y + window_size().y)
 	at.x = clampf(at.x, area.position.x, area.end.x - size.x)
 	bubble.position = Vector2i(at.round())
@@ -523,24 +553,47 @@ func _on_wake_clock_timeout() -> void:
 	_update_status()
 
 
+## Another conversation is under way, started or taken up from the phone: its old answer goes.
+func _on_brain_conversation_changed(_id: String) -> void:
+	_last_line = ""
+	bubble_text.text = ""
+
+
+## A line from the phone: the same turn as one typed here, screen read and all. `quiet` leaves the
+## speaking to the phone. False when the brain is asleep or busy.
+func send_remote(line: String, quiet: bool) -> bool:
+	if brain == null or not brain.is_ready() or is_thinking() or line.strip_edges().is_empty():
+		return false
+	_quiet = quiet
+	_send(line.strip_edges())
+	return true
+
+
 ## A sentence of the answer, as soon as it is written: shown, and said after the one before.
 func _on_brain_sentence(text: String) -> void:
 	if not _streamed:
 		_streamed = true
 		bubble_text.text = "You: %s\n\n%s" % [_last_line, text] if not _last_line.is_empty() else text
 		bubble_text.scroll_to_line(0)
-		if state == State.CHAT:
+		if state == State.CHAT and not _quiet:
 			_say(text)
 		return
 	bubble_text.text += " " + text
-	if state == State.CHAT:
+	if state == State.CHAT and not _quiet:
 		voice.add(text)
 		listen_timer.start(listen_timer.time_left + text.length() / 14.0)
 
 
 func _on_brain_replied(text: String) -> void:
-	bubble_text.text = ("You: %s\n\n%s" % [_last_line, text] if not _last_line.is_empty() else text) + _take_notes()
+	var notes: String = _take_notes()
+	bubble_text.text = ("You: %s\n\n%s" % [_last_line, text] if not _last_line.is_empty() else text) + notes
 	_update_stats()
+	answered.emit(text, notes.strip_edges().trim_prefix("(").trim_suffix(")"))
+	if _quiet:
+		# The phone said it; here the mic, if it was on, comes back now.
+		_quiet = false
+		_done_talking()
+		return
 	if state != State.CHAT:
 		return
 	_spoken = text
@@ -598,6 +651,7 @@ func _send(line: String) -> void:
 	if not brain.is_ready():
 		return
 	_pending_line = line
+	turn_started.emit(line)
 	# "Your name is ...", "remember that ...": done now, so the answer already knows. After the line
 	# is pending, so the note waits for the answer rather than being written over.
 	mind.heed(line)
@@ -690,7 +744,7 @@ func _on_screen_reader_read_finished(text: String) -> void:
 ## The mic turns on a conversation: talk, pause, the duck answers, then it listens again.
 func _on_mic_toggled(on: bool) -> void:
 	if not on:
-		listener.stop()
+		listener.finish()
 		return
 	listener.foundry_path = brain.foundry_path()
 	listener.model_alias = brain.speech_name
@@ -748,6 +802,31 @@ func _on_bubble_window_input(event: InputEvent) -> void:
 
 
 ## The Duck tab: its name and what it remembers.
+## Puts the captain's hat on or takes it off, keeps the choice, and tells the phone.
+func set_hat(on: bool) -> void:
+	duck.hat = on
+	_update_passthrough()
+	hat_box.set_pressed_no_signal(on)
+	save_hat(SETTINGS_PATH, on)
+	hat_changed.emit(on)
+
+
+func _on_hat_toggled(on: bool) -> void:
+	set_hat(on)
+
+
+static func load_hat(path: String) -> bool:
+	var config: ConfigFile = ConfigFile.new()
+	return bool(config.get_value("duck", "hat", false)) if config.load(path) == OK else false
+
+
+static func save_hat(path: String, on: bool) -> void:
+	var config: ConfigFile = ConfigFile.new()
+	config.load(path)
+	config.set_value("duck", "hat", on)
+	config.save(path)
+
+
 func _fill_mind() -> void:
 	name_field.text = mind.duck_name()
 	bubble.title = mind.duck_name() if not mind.duck_name().is_empty() else "Rubber Duck"
@@ -867,7 +946,10 @@ static func is_click(pressed_at: Vector2, released_at: Vector2, slop: float) -> 
 
 ## The window-space outline that takes the mouse, turned with a duck rolled `roll` degrees.
 ## 3D roll is anticlockwise on screen and 2D rotation clockwise, hence the minus.
-static func hit_outline(window: Vector2, size: Vector2, offset: Vector2, roll: float) -> PackedVector2Array:
+static func hit_outline(window: Vector2, size: Vector2, offset: Vector2, roll: float, reach: float = 0.0) -> PackedVector2Array:
+	# `reach` raises the top edge (the duck's head side) and leaves the base where it is.
+	size.y += reach
+	offset.y -= reach / 2.0
 	var half: Vector2 = size / 2.0
 	var to_window: Transform2D = Transform2D(-deg_to_rad(roll), window / 2.0) * Transform2D(0.0, offset)
 	return to_window * PackedVector2Array([

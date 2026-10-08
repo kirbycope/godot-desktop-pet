@@ -13,7 +13,14 @@ config_version=5
 config/name="Desktop Pet"
 config/description="A robot that walks the edges of the screen and chats through a local LLM on the NPU, GPU or CPU."
 run/main_scene="res://scenes/pet.tscn"
+run/main_scene.android="res://scenes/remote.tscn"
+run/low_processor_mode.android=true
 config/features=PackedStringArray("4.8", "GL Compatibility")
+config/icon="res://assets/icons/duck_icon.png"
+
+[input_devices]
+
+sensors/enable_accelerometer=true
 
 [audio]
 
@@ -22,14 +29,23 @@ driver/enable_input=true
 
 [display]
 
-window/size/viewport_width=144
-window/size/viewport_height=144
+window/size/viewport_width=176
+window/size/viewport_height=176
 window/size/resizable=false
 window/size/borderless=true
 window/size/always_on_top=true
 window/size/transparent=true
 window/subwindows/embed_subwindows=false
 window/per_pixel_transparency/allowed=true
+window/size/viewport_width.android=720
+window/size/viewport_height.android=1280
+window/size/borderless.android=false
+window/size/always_on_top.android=false
+window/size/transparent.android=false
+window/per_pixel_transparency/allowed.android=false
+window/stretch/mode.android="canvas_items"
+window/stretch/aspect.android="expand"
+window/handheld/orientation.android=1
 
 [editor_plugins]
 
@@ -40,3 +56,5 @@ enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 viewport/transparent_background=true
+viewport/transparent_background.android=false
+textures/vram_compression/import_etc2_astc=true

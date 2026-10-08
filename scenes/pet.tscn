@@ -10,12 +10,18 @@
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_02.ogg" id="8"]
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_03.ogg" id="9"]
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_04.ogg" id="10"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_01.ogg" id="fast1"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_02.ogg" id="fast2"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_03.ogg" id="fast3"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_04.ogg" id="fast4"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_05.ogg" id="fast5"]
 [ext_resource type="Texture2D" path="res://assets/icons/microphone.svg" id="11"]
 [ext_resource type="Resource" path="res://resources/model_preferences.tres" id="12"]
 [ext_resource type="Script" path="res://scripts/mind.gd" id="13"]
 [ext_resource type="Script" path="res://scripts/kokoro.gd" id="14"]
 [ext_resource type="Script" path="res://scripts/searcher.gd" id="15"]
 [ext_resource type="Script" path="res://scripts/chat_stream.gd" id="16"]
+[ext_resource type="Script" path="res://scripts/remote.gd" id="17"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bubble"]
 bg_color = Color(1, 1, 1, 0.97)
@@ -148,14 +154,22 @@ stream_1/stream = ExtResource("8")
 stream_2/stream = ExtResource("9")
 stream_3/stream = ExtResource("10")
 
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_fast"]
+streams_count = 5
+stream_0/stream = ExtResource("fast1")
+stream_1/stream = ExtResource("fast2")
+stream_2/stream = ExtResource("fast3")
+stream_3/stream = ExtResource("fast4")
+stream_4/stream = ExtResource("fast5")
+
 [sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_mic"]
 
 [node name="Pet" type="Node2D"]
 script = ExtResource("1")
 
 [node name="View" type="SubViewportContainer" parent="."]
-offset_right = 144.0
-offset_bottom = 144.0
+offset_right = 176.0
+offset_bottom = 176.0
 mouse_filter = 2
 stretch = true
 
@@ -164,7 +178,7 @@ own_world_3d = true
 transparent_bg = true
 handle_input_locally = false
 msaa_3d = 2
-size = Vector2i(144, 144)
+size = Vector2i(176, 176)
 render_target_update_mode = 4
 
 [node name="Duck" parent="View/Viewport" instance=ExtResource("2")]
@@ -214,6 +228,17 @@ wait_time = 0.25
 [node name="ScreenReader" type="Node" parent="."]
 script = ExtResource("5")
 
+[node name="Remote" type="Node" parent="." node_paths=PackedStringArray("pet", "brain", "mind", "voice", "listener", "label")]
+script = ExtResource("17")
+pet = NodePath("..")
+brain = NodePath("../Brain")
+mind = NodePath("../Mind")
+voice = NodePath("../Voice")
+listener = NodePath("../Listener")
+label = NodePath("../Bubble/Panel/Margin/Tabs/Settings/Phone")
+
+[node name="BeaconClock" type="Timer" parent="Remote"]
+
 [node name="Searcher" type="Node" parent="."]
 script = ExtResource("15")
 
@@ -230,6 +255,9 @@ max_redirects = 4
 
 [node name="Squeak" type="AudioStreamPlayer" parent="."]
 stream = SubResource("AudioStreamRandomizer_squeak")
+
+[node name="FastSqueak" type="AudioStreamPlayer" parent="."]
+stream = SubResource("AudioStreamRandomizer_fast")
 
 [node name="Listener" type="Node" parent="."]
 script = ExtResource("6")
@@ -392,6 +420,14 @@ tooltip_text = "The microphone the duck listens through. Default follows Windows
 clip_text = true
 fit_to_longest_item = false
 
+[node name="Phone" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings"]
+layout_mode = 2
+mouse_filter = 1
+theme_override_font_sizes/font_size = 12
+text = "Phone: off"
+clip_text = true
+text_overrun_behavior = 3
+
 [node name="Duck" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
 visible = false
 layout_mode = 2
@@ -412,6 +448,19 @@ placeholder_text = "No name yet"
 [node name="SaveName" type="Button" parent="Bubble/Panel/Margin/Tabs/Duck/NameRow"]
 layout_mode = 2
 text = "Save"
+
+[node name="HatRow" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Duck"]
+layout_mode = 2
+
+[node name="HatLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Duck/HatRow"]
+layout_mode = 2
+text = "Hat"
+
+[node name="Hat" type="CheckBox" parent="Bubble/Panel/Margin/Tabs/Duck/HatRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "The captain's hat, here and on the phone."
+text = "Captain's hat"
 
 [node name="MemoriesLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Duck"]
 layout_mode = 2
@@ -483,8 +532,19 @@ item_0/id = 0
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Settings/Buttons/Apply" to="." method="_on_apply_pressed"]
 [connection signal="id_pressed" from="Menu" to="." method="_on_menu_id_pressed"]
 [connection signal="item_selected" from="Bubble/Panel/Margin/Tabs/Settings/MicRow/Mics" to="." method="_on_mic_selected"]
+[connection signal="timeout" from="Remote/BeaconClock" to="Remote" method="_on_beacon_clock_timeout"]
+[connection signal="sentence" from="Brain" to="Remote" method="_on_brain_sentence"]
+[connection signal="status_changed" from="Brain" to="Remote" method="_on_brain_status_changed"]
+[connection signal="conversation_changed" from="Brain" to="Remote" method="_on_brain_conversation_changed"]
+[connection signal="conversation_changed" from="Brain" to="." method="_on_brain_conversation_changed"]
+[connection signal="turn_started" from="." to="Remote" method="_on_pet_turn_started"]
+[connection signal="answered" from="." to="Remote" method="_on_pet_answered"]
+[connection signal="rendered" from="Voice/Kokoro" to="Remote" method="_on_kokoro_rendered"]
+[connection signal="heard_from_phone" from="Listener" to="Remote" method="_on_listener_heard_from_phone"]
 [connection signal="changed" from="Mind" to="." method="_on_mind_changed"]
 [connection signal="text_submitted" from="Bubble/Panel/Margin/Tabs/Duck/NameRow/Name" to="." method="_on_name_submitted"]
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/NameRow/SaveName" to="." method="_on_save_name_pressed"]
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/Buttons/Forget" to="." method="_on_forget_pressed"]
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/Buttons/Folder" to="." method="_on_folder_pressed"]
+[connection signal="toggled" from="Bubble/Panel/Margin/Tabs/Duck/HatRow/Hat" to="." method="_on_hat_toggled"]
+[connection signal="hat_changed" from="." to="Remote" method="_on_pet_hat_changed"]

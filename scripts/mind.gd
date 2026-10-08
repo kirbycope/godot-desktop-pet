@@ -10,8 +10,10 @@ extends Node
 ##   user://duck/asked.md         the questions it asked lately, so it asks something new
 ##   user://duck/learned.md       facts it found on the web once it had told all of its own
 ##   user://duck/searched.md      the topics it has searched for facts, so it picks a new one
-##   user://duck/conversations/   everything said, one Markdown file a day; the last few exchanges
-##                                go back into the prompt when the duck starts again
+##   user://duck/conversations/   everything said, one Markdown file a conversation, named for when it
+##                                began (2026-10-08_064512.md; older ones a day each, 2026-10-07.md);
+##                                the current one's last few exchanges go into the prompt
+##   user://duck/current.txt      which conversation is under way; without it, the newest
 ##
 ## The model asks for changes with tags at the end of a reply, such as [remember: ...]; `digest`
 ## carries them out and strips them before the reply is shown or spoken.
@@ -326,7 +328,7 @@ func record(role: String, text: String) -> void:
 		return
 	var folder: String = root.path_join("conversations")
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(folder))
-	var path: String = folder.path_join(Time.get_date_string_from_system() + ".md")
+	var path: String = folder.path_join(conversation_id() + ".md")
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
 	if file == null:
 		return
@@ -335,21 +337,89 @@ func record(role: String, text: String) -> void:
 	file.close()
 
 
-## The last `count` messages from the newest conversation logs, oldest first, as chat messages.
+## The last `count` messages of the conversation under way, oldest first, as chat messages.
 func recent(count: int) -> Array[Dictionary]:
-	var folder: String = root.path_join("conversations")
-	var days: PackedStringArray = DirAccess.get_files_at(folder) if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(folder)) else PackedStringArray()
-	var found: Array[Dictionary] = []
-	var sorted: Array = Array(days).filter(func(f: String) -> bool: return f.ends_with(".md"))
-	sorted.sort()
-	sorted.reverse()
-	for day: String in sorted:
-		var earlier: Array[Dictionary] = parse_log(FileAccess.get_file_as_string(folder.path_join(day)))
-		earlier.append_array(found)
-		found = earlier
-		if found.size() >= count:
-			break
+	var found: Array[Dictionary] = conversation(conversation_id())
 	return found.slice(maxi(0, found.size() - count))
+
+
+## The conversation under way: the one named in current.txt, else the newest, else a new one.
+func conversation_id() -> String:
+	var kept: String = FileAccess.get_file_as_string(root.path_join("current.txt")).strip_edges() if FileAccess.file_exists(root.path_join("current.txt")) else ""
+	if not kept.is_empty():
+		return kept
+	var ids: PackedStringArray = conversation_ids()
+	return ids[0] if not ids.is_empty() else new_conversation()
+
+
+## Starts a new conversation and makes it the one under way. Its file appears with its first line.
+func new_conversation() -> String:
+	var id: String = conversation_name(Time.get_datetime_dict_from_system())
+	# Two in the same second get a suffix rather than sharing a file.
+	var taken: PackedStringArray = conversation_ids()
+	var unique: String = id
+	var n: int = 2
+	while unique in taken:
+		unique = "%s_%d" % [id, n]
+		n += 1
+	_write(root.path_join("current.txt"), unique)
+	return unique
+
+
+## Goes back to conversation `id`. False when there is no such conversation.
+func open_conversation(id: String) -> bool:
+	if not id in conversation_ids():
+		return false
+	_write(root.path_join("current.txt"), id)
+	return true
+
+
+## Every conversation with a file, newest first: [{id, title, when, messages}]. The title is the
+## first thing you said in it.
+func conversations() -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for id: String in conversation_ids():
+		var said: Array[Dictionary] = conversation(id)
+		found.append({"id": id, "title": conversation_title(said), "when": conversation_when(id), "messages": said.size()})
+	return found
+
+
+## The messages of conversation `id`, oldest first.
+func conversation(id: String) -> Array[Dictionary]:
+	return parse_log(FileAccess.get_file_as_string(root.path_join("conversations").path_join(id + ".md")))
+
+
+## The conversations' names, newest first.
+func conversation_ids() -> PackedStringArray:
+	var folder: String = root.path_join("conversations")
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(folder)):
+		return PackedStringArray()
+	var ids: Array = Array(DirAccess.get_files_at(folder)).filter(func(f: String) -> bool: return f.ends_with(".md")).map(func(f: String) -> String: return f.trim_suffix(".md"))
+	ids.sort()
+	ids.reverse()
+	return PackedStringArray(ids)
+
+
+## 2026-10-08_064512 for 8 October 2026 at 06:45:12.
+static func conversation_name(at: Dictionary) -> String:
+	return "%04d-%02d-%02d_%02d%02d%02d" % [at["year"], at["month"], at["day"], at["hour"], at["minute"], at["second"]]
+
+
+## "2026-10-08 06:45" from 2026-10-08_064512; a day's log reads as the day.
+static func conversation_when(id: String) -> String:
+	var parts: PackedStringArray = id.split("_")
+	if parts.size() < 2 or parts[1].length() < 4:
+		return parts[0]
+	return "%s %s:%s" % [parts[0], parts[1].substr(0, 2), parts[1].substr(2, 2)]
+
+
+## The first thing you said, cut to fit a list; else the duck's first line.
+static func conversation_title(said: Array[Dictionary]) -> String:
+	for message: Dictionary in said:
+		if message.get("role") == "user":
+			var line: String = String(message.get("content", ""))
+			return line if line.length() <= 60 else line.left(57).strip_edges() + "..."
+	return String(said[0].get("content", "")).left(60) if not said.is_empty() else "(nothing said yet)"
 
 
 func folder_path() -> String:

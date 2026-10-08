@@ -305,3 +305,11 @@ func test_an_answer_never_starts_on_but() -> void:
 	assert_eq(Brain.without_leading_conjunction("And, honestly, I love ponds."), "Honestly, I love ponds.")
 	assert_eq(Brain.without_leading_conjunction("Butter is lovely."), "Butter is lovely.", "a whole word only")
 	assert_eq(Brain.without_leading_conjunction("Ponds are great."), "Ponds are great.")
+
+
+func test_good_morning_after_a_bug_is_not_more_debugging() -> void:
+	assert_false(Brain.is_debugging("good morning!", "why does this crash?", ""), "a greeting ends the thread")
+	assert_false(Brain.is_debugging("Thanks, that fixed it", "why does this crash?", ""), "so does a thank-you")
+	assert_true(Brain.is_debugging("hi, why does this crash?", "", ""), "a greeting with a bug in it is still a bug")
+	assert_true(Brain.is_debugging("they spawn fine but don't move", "my enemies are stuck", ""), "the thread goes on")
+	assert_eq(Brain.DEBUG_THREAD_MS, 300000, "for five minutes")

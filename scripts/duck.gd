@@ -12,8 +12,10 @@ const ANIMATIONS: Array[StringName] = [&"walk", &"climb", &"hang", &"idle", &"ch
 const HOP_SECONDS: float = 0.9
 ## The yaw that points the model's face (its +X) at the camera.
 const VIEWER_YAW: float = -90.0
-## Where the model's base sits: the bottom of the 0.34 m tall orthographic view, a hair above it.
-const BASE: Vector3 = Vector3(0.0, -0.168, 0.0)
+## Where the model's base sits: the bottom of the 0.4156 m tall orthographic view, a hair above it.
+## The view is taller than the duck so the captain's hat stays in it when the duck stretches to fall
+## or hop; the pivot it rolls about is the view's centre, 0.0378 m above the model's origin.
+const BASE: Vector3 = Vector3(0.0, -0.205778, 0.0)
 
 ## Degrees the duck turns towards the camera, so it is seen three-quarters on rather than in profile.
 @export_range(0.0, 90.0) var turn_to_camera: float = 30.0
@@ -35,18 +37,26 @@ var roll: float = 0.0:
 		roll = value
 		if is_node_ready():
 			pivot.rotation_degrees.z = roll
+## Wears the captain's hat (scenes/hat.tscn, sitting on its head and turning with it).
+var hat: bool = false:
+	set(value):
+		hat = value
+		if is_node_ready():
+			hat_node.visible = value
 var _time: float = 0.0
 var _perk_time: float = INF
 
 @onready var pivot: Node3D = $Pivot
 @onready var body: Node3D = $Pivot/Body
 @onready var yaw: Node3D = $Pivot/Body/Yaw
+@onready var hat_node: Node3D = $Pivot/Body/Yaw/Hat
 @onready var zzz: Array[Label3D] = [$Zzz/Z1, $Zzz/Z2, $Zzz/Z3]
 
 
 func _ready() -> void:
 	yaw.rotation_degrees.y = target_yaw()
 	pivot.rotation_degrees.z = roll
+	hat_node.visible = hat
 
 
 func _process(delta: float) -> void:
@@ -72,8 +82,9 @@ func target_yaw() -> float:
 	return VIEWER_YAW if looking_at_viewer else yaw_for(facing, turn_to_camera)
 
 
-func play(name: StringName) -> void:
-	if name != animation:
+## Plays `name`; one already playing carries on, unless `from_start`, as for a squeeze on each tap.
+func play(name: StringName, from_start: bool = false) -> void:
+	if name != animation or from_start:
 		_time = 0.0
 	animation = name
 

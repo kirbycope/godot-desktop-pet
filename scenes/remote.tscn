@@ -1,0 +1,538 @@
+[gd_scene load_steps=16 format=3]
+
+[ext_resource type="Script" path="res://scripts/remote_app.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/duck.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/listener.gd" id="3"]
+[ext_resource type="Texture2D" path="res://assets/icons/microphone.svg" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_01.ogg" id="5"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_02.ogg" id="6"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_03.ogg" id="7"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_04.ogg" id="8"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_01.ogg" id="fast1"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_02.ogg" id="fast2"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_03.ogg" id="fast3"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_04.ogg" id="fast4"]
+[ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_05.ogg" id="fast5"]
+[ext_resource type="Shader" path="res://assets/water/pond_water.gdshader" id="9"]
+[ext_resource type="Shader" path="res://assets/water/bubbles.gdshader" id="10"]
+[ext_resource type="Shader" path="res://assets/water/suds.gdshader" id="11"]
+[ext_resource type="Script" path="res://scripts/suds.gd" id="12"]
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_fast"]
+streams_count = 5
+stream_0/stream = ExtResource("fast1")
+stream_1/stream = ExtResource("fast2")
+stream_2/stream = ExtResource("fast3")
+stream_3/stream = ExtResource("fast4")
+stream_4/stream = ExtResource("fast5")
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_squeak"]
+streams_count = 4
+stream_0/stream = ExtResource("5")
+stream_1/stream = ExtResource("6")
+stream_2/stream = ExtResource("7")
+stream_3/stream = ExtResource("8")
+
+[sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_mic"]
+
+[sub_resource type="Gradient" id="Gradient_sky"]
+offsets = PackedFloat32Array(0, 0.55, 1)
+colors = PackedColorArray(0.36, 0.66, 0.93, 1, 0.66, 0.85, 0.98, 1, 0.9, 0.96, 1, 1)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_sky"]
+gradient = SubResource("Gradient_sky")
+fill_to = Vector2(0, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_ripples"]
+frequency = 0.03
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_ripples"]
+width = 256
+height = 256
+seamless = true
+as_normal_map = true
+bump_strength = 6.0
+noise = SubResource("FastNoiseLite_ripples")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_water"]
+render_priority = 0
+shader = ExtResource("9")
+shader_parameter/shallow_color = Color(0.66, 0.9, 0.97, 0.92)
+shader_parameter/deep_color = Color(0.36, 0.7, 0.88, 0.96)
+shader_parameter/foam_color = Color(1, 1, 1, 1)
+shader_parameter/edge_foam_width = 0.0
+shader_parameter/depth_foam_distance = 0.1
+shader_parameter/contact_footprint = Vector4(0, 0, 0.125, 0.15)
+shader_parameter/foam_softness = 0.4
+shader_parameter/wave_amplitude = 0.004
+shader_parameter/wave_frequency = 12.0
+shader_parameter/wave_speed = 0.6
+shader_parameter/wave_steepness = 0.7
+shader_parameter/crest_foam = 0.1
+shader_parameter/crest_light = 0.4
+shader_parameter/normal_map = SubResource("NoiseTexture2D_ripples")
+shader_parameter/normal_scale = 0.2
+shader_parameter/uv_scale = Vector2(14, 14)
+shader_parameter/ripple_area = Vector4(0, 0, 0, 0)
+shader_parameter/weather_wind_strength = 1.5
+shader_parameter/weather_wind_direction = Vector3(1, 0, 0.35)
+shader_parameter/weather_precipitation_strength = 0.0
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_water"]
+material = SubResource("ShaderMaterial_water")
+size = Vector2(24, 24)
+subdivide_width = 160
+subdivide_depth = 160
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_bubble"]
+render_priority = 10
+shader = ExtResource("10")
+shader_parameter/fuwafuwa_speed = 1.5
+shader_parameter/fuwafuwa_size = 0.05
+shader_parameter/outline_color = Color(0.9, 0.97, 1, 1)
+shader_parameter/outline_ratio = 1.0
+shader_parameter/noise_speed = 0.2
+shader_parameter/noise_scale = 1.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_bubble"]
+material = SubResource("ShaderMaterial_bubble")
+radius = 0.1
+height = 0.2
+radial_segments = 20
+rings = 10
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_suds"]
+shader = ExtResource("11")
+shader_parameter/foam_color = Color(0.98, 0.99, 1, 1)
+shader_parameter/shade_color = Color(0.7, 0.8, 0.9, 1)
+shader_parameter/sheen = 0.35
+shader_parameter/quiver = 0.06
+shader_parameter/bob = 0.003
+
+[sub_resource type="SphereMesh" id="SphereMesh_sud"]
+radius = 0.5
+height = 1.0
+radial_segments = 10
+rings = 5
+
+[sub_resource type="Curve" id="Curve_bubble"]
+_data = [Vector2(0, 0.45), 0.0, 1.2, 0, 0, Vector2(0.88, 1), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_chat"]
+bg_color = Color(1, 1, 1, 0.97)
+border_width_top = 3
+border_color = Color(0.2, 0.24, 0.32, 1)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_input"]
+bg_color = Color(1, 0.98, 0.9, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.95, 0.6, 0.1, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 14.0
+content_margin_right = 14.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dot"]
+bg_color = Color(0.9, 0.12, 0.12, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pairing"]
+bg_color = Color(1, 1, 1, 0.98)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_list"]
+bg_color = Color(0.95, 0.97, 1, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.75, 0.82, 0.9, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yours"]
+bg_color = Color(0.16, 0.48, 0.96, 1)
+corner_radius_top_left = 26
+corner_radius_top_right = 26
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 26
+content_margin_left = 22.0
+content_margin_top = 14.0
+content_margin_right = 22.0
+content_margin_bottom = 14.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ducks"]
+bg_color = Color(0.91, 0.92, 0.94, 1)
+corner_radius_top_left = 26
+corner_radius_top_right = 26
+corner_radius_bottom_right = 26
+corner_radius_bottom_left = 6
+content_margin_left = 22.0
+content_margin_top = 14.0
+content_margin_right = 22.0
+content_margin_bottom = 14.0
+
+[sub_resource type="Theme" id="Theme_phone"]
+default_font_size = 26
+Label/colors/font_color = Color(0.13, 0.15, 0.2, 1)
+RichTextLabel/colors/default_color = Color(0.13, 0.15, 0.2, 1)
+LineEdit/colors/font_color = Color(0.13, 0.15, 0.2, 1)
+LineEdit/styles/normal = SubResource("StyleBoxFlat_input")
+ItemList/colors/font_color = Color(0.13, 0.15, 0.2, 1)
+ItemList/styles/panel = SubResource("StyleBoxFlat_list")
+ItemList/styles/focus = SubResource("StyleBoxFlat_list")
+
+[node name="RemoteApp" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_phone")
+script = ExtResource("1")
+your_bubble = SubResource("StyleBoxFlat_yours")
+duck_bubble = SubResource("StyleBoxFlat_ducks")
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = SubResource("GradientTexture2D_sky")
+expand_mode = 1
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 0
+
+[node name="DuckView" type="SubViewportContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+stretch = true
+
+[node name="Viewport" type="SubViewport" parent="Layout/DuckView"]
+own_world_3d = true
+transparent_bg = true
+handle_input_locally = false
+msaa_3d = 2
+size = Vector2i(720, 640)
+render_target_update_mode = 4
+
+[node name="Duck" parent="Layout/DuckView/Viewport" instance=ExtResource("2")]
+
+[node name="PondCamera" type="Camera3D" parent="Layout/DuckView/Viewport"]
+transform = Transform3D(1, 0, 0, 0, 0.98768836, 0.15643448, 0, -0.15643448, 0.98768836, 0, 0.14520662, 1.106211)
+current = true
+fov = 28.0
+near = 0.05
+far = 30.0
+
+[node name="Water" type="MeshInstance3D" parent="Layout/DuckView/Viewport"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.13, -8)
+mesh = SubResource("PlaneMesh_water")
+
+[node name="Suds" type="MultiMeshInstance3D" parent="Layout/DuckView/Viewport"]
+material_override = SubResource("ShaderMaterial_suds")
+script = ExtResource("12")
+sud_mesh = SubResource("SphereMesh_sud")
+
+[node name="Bubbles" type="CPUParticles3D" parent="Layout/DuckView/Viewport"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.13, 0)
+emitting = false
+amount = 10
+lifetime = 4.0
+one_shot = true
+explosiveness = 0.75
+mesh = SubResource("SphereMesh_bubble")
+emission_shape = 3
+emission_box_extents = Vector3(0.22, 0.005, 0.18)
+direction = Vector3(0, 1, 0)
+spread = 12.0
+gravity = Vector3(0, 0.012, 0)
+initial_velocity_min = 0.02
+initial_velocity_max = 0.06
+angular_velocity_min = -45.0
+angular_velocity_max = 45.0
+scale_amount_min = 0.06
+scale_amount_max = 0.18
+scale_amount_curve = SubResource("Curve_bubble")
+
+[node name="Chat" type="PanelContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_chat")
+
+[node name="Margin" type="MarginContainer" parent="Layout/Chat"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 22
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 28
+
+[node name="Column" type="VBoxContainer" parent="Layout/Chat/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Header" type="HBoxContainer" parent="Layout/Chat/Margin/Column"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Layout/Chat/Margin/Column/Header"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Rubber Duck"
+
+[node name="Status" type="Label" parent="Layout/Chat/Margin/Column/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.85, 0.35, 0.1, 1)
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="New" type="Button" parent="Layout/Chat/Margin/Column/Header"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+tooltip_text = "Start a new conversation; this one is kept under Past"
+disabled = true
+text = "New"
+
+[node name="Mute" type="Button" parent="Layout/Chat/Margin/Column/Header"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+tooltip_text = "Mute the duck: the PC then skips making its voice, so answers come sooner"
+toggle_mode = true
+text = "Mute"
+
+[node name="Hat" type="Button" parent="Layout/Chat/Margin/Column/Header"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+tooltip_text = "The captain's hat, here and on the PC"
+toggle_mode = true
+text = "Hat"
+
+[node name="Past" type="Button" parent="Layout/Chat/Margin/Column/Header"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+tooltip_text = "Past conversations"
+disabled = true
+text = "Past"
+
+[node name="Conversation" type="ScrollContainer" parent="Layout/Chat/Margin/Column"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Messages" type="VBoxContainer" parent="Layout/Chat/Margin/Column/Conversation"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="Entry" type="HBoxContainer" parent="Layout/Chat/Margin/Column"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Input" type="LineEdit" parent="Layout/Chat/Margin/Column/Entry"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Talk to me"
+editable = false
+
+[node name="Mic" type="Button" parent="Layout/Chat/Margin/Column/Entry"]
+custom_minimum_size = Vector2(72, 72)
+layout_mode = 2
+tooltip_text = "Talk to the duck"
+disabled = true
+toggle_mode = true
+icon = ExtResource("4")
+icon_alignment = 1
+expand_icon = true
+
+[node name="Dot" type="Panel" parent="Layout/Chat/Margin/Column/Entry/Mic"]
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -20.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = 20.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_dot")
+
+[node name="Send" type="Button" parent="Layout/Chat/Margin/Column/Entry"]
+custom_minimum_size = Vector2(120, 72)
+layout_mode = 2
+disabled = true
+text = "Send"
+
+[node name="Pairing" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -360.0
+offset_right = 320.0
+offset_bottom = 360.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_pairing")
+
+[node name="Margin" type="MarginContainer" parent="Pairing"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="Column" type="VBoxContainer" parent="Pairing/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Heading" type="Label" parent="Pairing/Margin/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Find your duck"
+
+[node name="FoundLabel" type="Label" parent="Pairing/Margin/Column"]
+layout_mode = 2
+text = "PCs on this Wi-Fi:"
+
+[node name="Found" type="ItemList" parent="Pairing/Margin/Column"]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+
+[node name="Address" type="LineEdit" parent="Pairing/Margin/Column"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+placeholder_text = "or the PC's address"
+
+[node name="Code" type="LineEdit" parent="Pairing/Margin/Column"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+placeholder_text = "Code from the PC's Settings tab"
+max_length = 6
+virtual_keyboard_type = 2
+
+[node name="Connect" type="Button" parent="Pairing/Margin/Column"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+text = "Connect"
+
+[node name="Note" type="Label" parent="Pairing/Margin/Column"]
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 3
+
+[node name="History" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -460.0
+offset_right = 320.0
+offset_bottom = 460.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_pairing")
+
+[node name="Margin" type="MarginContainer" parent="History"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="Column" type="VBoxContainer" parent="History/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Heading" type="Label" parent="History/Margin/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Past conversations"
+
+[node name="List" type="ItemList" parent="History/Margin/Column"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/font_size = 24
+
+[node name="Close" type="Button" parent="History/Margin/Column"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+text = "Close"
+
+[node name="Listener" type="Node" parent="."]
+script = ExtResource("3")
+hand_off = true
+
+[node name="Mic" type="AudioStreamPlayer" parent="Listener"]
+stream = SubResource("AudioStreamMicrophone_mic")
+bus = &"Mic"
+
+[node name="Player" type="AudioStreamPlayer" parent="."]
+
+[node name="Squeak" type="AudioStreamPlayer" parent="."]
+stream = SubResource("AudioStreamRandomizer_squeak")
+
+[node name="FastSqueak" type="AudioStreamPlayer" parent="."]
+stream = SubResource("AudioStreamRandomizer_fast")
+
+[node name="PingClock" type="Timer" parent="."]
+wait_time = 5.0
+
+[connection signal="gui_input" from="Layout/DuckView" to="." method="_on_duck_view_gui_input"]
+[connection signal="text_submitted" from="Layout/Chat/Margin/Column/Entry/Input" to="." method="_on_input_text_submitted"]
+[connection signal="toggled" from="Layout/Chat/Margin/Column/Entry/Mic" to="." method="_on_mic_toggled"]
+[connection signal="pressed" from="Layout/Chat/Margin/Column/Entry/Send" to="." method="_on_send_pressed"]
+[connection signal="item_selected" from="Pairing/Margin/Column/Found" to="." method="_on_found_item_selected"]
+[connection signal="pressed" from="Pairing/Margin/Column/Connect" to="." method="_on_connect_pressed"]
+[connection signal="text_submitted" from="Pairing/Margin/Column/Code" to="." method="_on_code_submitted"]
+[connection signal="wav_ready" from="Listener" to="." method="_on_listener_wav_ready"]
+[connection signal="mode_changed" from="Listener" to="." method="_on_listener_mode_changed"]
+[connection signal="finished" from="Player" to="." method="_on_player_finished"]
+[connection signal="timeout" from="PingClock" to="." method="_on_ping_clock_timeout"]
+[connection signal="pressed" from="Layout/Chat/Margin/Column/Header/New" to="." method="_on_new_pressed"]
+[connection signal="toggled" from="Layout/Chat/Margin/Column/Header/Mute" to="." method="_on_mute_toggled"]
+[connection signal="toggled" from="Layout/Chat/Margin/Column/Header/Hat" to="." method="_on_hat_toggled"]
+[connection signal="pressed" from="Layout/Chat/Margin/Column/Header/Past" to="." method="_on_past_pressed"]
+[connection signal="item_selected" from="History/Margin/Column/List" to="." method="_on_history_item_selected"]
+[connection signal="pressed" from="History/Margin/Column/Close" to="." method="_on_history_close_pressed"]

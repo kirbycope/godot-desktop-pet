@@ -52,8 +52,8 @@ more; later loads take seconds.
 | --- | --- |
 | Left-click | squeaks (one of four rubber duck squeaks), then says one of its greetings aloud, shown in the bubble too; clicking again closes it |
 | Type in the orange box and press Enter, or Send | reads your screen, then answers in the bubble and out loud; Escape closes it. The box takes typing at any time; a line sent while the duck is still waking up is answered once it is ready |
-| Click the microphone | starts a spoken conversation: talk, pause, and the duck answers out loud, then listens again. Click it again to stop |
-| Drag | dangles from the cursor; let go still moving and it keeps the mouse's speed, so it can be thrown: it spins, bounces off the screen's edges, squeaks on a hard hit and slides to a stop on the bottom |
+| Click the microphone | starts a spoken conversation: talk, pause, and the duck answers out loud, then listens again. Click it again to stop; a sentence you are still saying is sent, not dropped |
+| Drag | dangles from the cursor; let go still moving and it keeps the mouse's speed, so it can be thrown: it spins, bounces off the screen's edges, gives one of five quick squeaks when thrown hard and on every hard hit, and slides to a stop on the bottom |
 | Right-click | opens the menu, with Quit |
 
 The bubble has three tabs:
@@ -67,8 +67,8 @@ The bubble has three tabs:
 ## Its name, memories, personality and skills
 
 The duck keeps what it knows as plain text in its own folder, `user://duck/` (on Windows,
-`%APPDATA%\Godotpp_userdata\Desktop Pet\duck\`). The **Duck** tab shows its name and what it
-remembers, forgets the selected memory, and opens the folder.
+`%APPDATA%\Godotpp_userdata\Desktop Pet\duck\`). The **Duck** tab shows its name, whether it
+wears its captain's hat, and what it remembers; it forgets the selected memory and opens the folder.
 
 | File | Holds |
 | --- | --- |
@@ -79,7 +79,8 @@ remembers, forgets the selected memory, and opens the folder.
 | `learned.md` | Facts it looked up on the web once it had told all of its own, one per `- ` line; edit or delete freely |
 | `searched.md` | The topics it has searched for facts, so each search is about something new |
 | `asked.md` | Its last 12 questions, sent with each message as ones not to ask again |
-| `conversations/<date>.md` | Everything said, a file a day, one `- 14:05:12 **You:** ...` or `**Duck:** ...` line each. The last three exchanges go back into the prompt when the duck starts again, so it picks up where you left off |
+| `conversations/<when>.md` | Everything said, a file a conversation, named for when it began (`2026-10-08_064512.md`; the logs from before conversations were a file a day, `2026-10-07.md`), one `- 14:05:12 **You:** ...` or `**Duck:** ...` line each. The last three exchanges of the conversation under way go back into the prompt, so the duck picks up where you left off, even after a restart |
+| `current.txt` | Which conversation is under way; without it, the newest |
 | `skills/*.md` | Instructions with trigger words. When your message or the screen text mentions a trigger, that skill rides along with that one message, at most two at a time. Seeded with `godot-gdscript`, `python` and `javascript`, each a short list of the usual causes of bugs in that language. A seeded skill you have not edited is brought up to date when a newer one ships (the versions it replaces are kept in `seed/previous/`); one you have edited is left alone |
 
 A skill file is a short header and the instructions:
@@ -299,6 +300,116 @@ exactly that here, while the laptop's own microphone array worked).
 It answers whatever it hears while the microphone is on, including talk that was not meant for it,
 so turn the microphone off when you are talking to someone else.
 
+## On your phone
+
+The Android app is a remote control for the duck on your PC: the duck on the top half of the
+phone, the chat on the bottom half. It is not a second duck. The brain, the duck's memory and its
+screen reading all stay on the PC, so from the phone you talk to the same duck, with the same
+memories and the same conversation, and it still reads the PC's screen: with the phone in hand at
+the desk, "why does this crash?" reads your editor.
+
+- **Pairing.** The PC's Settings tab shows `Phone: code 462570  192.168.4.161:39842`. The app lists
+  the PCs it hears on the Wi-Fi (the PC broadcasts a beacon once a second); pick yours, or type its
+  address, enter the six-digit code, and Connect, or Done on the keyboard. The app remembers both
+  and reconnects by itself. The code is made once and kept in `user://settings.cfg` under
+  `[remote]`; it keeps anyone else on the network from talking to the duck, and through it reading
+  your screen.
+- **Typing** a line runs the same turn as typing it on the PC: screen read, search, memory and all.
+  The answer streams onto the phone sentence by sentence, as it does on the PC.
+- **Voice out.** With a Kokoro voice chosen on the PC, each sentence is spoken by Kokoro on the PC
+  and the audio sent to the phone, which plays them in order; the PC stays quiet on the phone's
+  turns (`speak_here_too` on the Remote node speaks them on both). With a system voice chosen, the
+  phone reads the text with its own voice.
+- **Voice in.** The mic button listens on the phone with the same pause rule as on the PC, and
+  sends each sentence to the PC as a WAV to be written down by Parakeet there; the phone has no
+  speech model of its own. Tapping it off mid-sentence sends what you have said so far.
+- **The chat** looks like a messaging app: your messages in blue bubbles on the right, the
+  duck's in grey on the left, each as wide as its text up to three quarters of the screen. The
+  duck's bubble grows as its sentences arrive.
+- **New** starts a new conversation: the duck keeps its memories and personality but no longer
+  has the last one in mind. **Past** lists the conversations, newest first, each by when it began
+  and the first thing you said; tap one to take it up again where it left off. They are the files
+  in `user://duck/conversations/` on the PC, so the PC duck switches with the phone.
+- **Mute** silences the duck on the phone and tells the PC, which then makes no audio for it at
+  all, so a muted answer is done as soon as its text is; the choice is remembered.
+- **The bubble bath.** The duck floats in milky bath water (the pond water from weather-fx, made
+  calm), bobbing gently, with suds piled round it where it sits and clumps of foam floating about
+  (`scripts/suds.gd`: hundreds of small foam bubbles in one MultiMesh, placed once from a seed and
+  quivering in `assets/water/suds.gdshader`), and a sky meeting the water at the horizon. The bath
+  is calm until it is disturbed: tapping the duck, or jolting the phone (its accelerometer;
+  `shake_threshold`, 2.5 m/s² beyond the steady pull of gravity), sends up a burst of
+  rainbow-rimmed bubbles (the bubble shader from the Godot 4.5 sandbox) and raises the swell and
+  the duck's rocking, which settle again by half every `settle_half_life` (0.8 s). The water's
+  ripple normal map is made by Godot from noise. Its contact foam, the white band where something
+  sits in the water, is weather-fx's own, but measured from the duck's footprint on the water
+  (`contact_footprint`) rather than from the depth texture: on Android's Compatibility renderer,
+  reading the depth texture drew the water over the duck and the suds. See `CREDITS.md`.
+- **Pick it up, drop it, throw it.** Press on the duck and move your finger and it comes up out of
+  the bath, dangling; let go to drop it, or let go mid-swing to throw it, and it bounces off the
+  sides of the view and splashes down, as hard as it came, with bubbles and a quick squeak for a belly
+  flop, then drifts back into its suds. A tap still squeezes it, and so does pushing it down into
+  the water.
+- **The captain's hat** is optional: the Captain's hat box on the PC's Duck tab, under the name, or
+  the Hat button on the phone (or a double tap on its duck) puts it on or takes it off, on both ducks
+  at once; the choice is kept in
+  `user://settings.cfg`. It is `scenes/hat.tscn`, the model with its four PBR textures as one
+  material, sitting on the duck's head and turning with it.
+- **The duck** sleeps until the PC's brain is awake, thinks while it waits, talks while it speaks,
+  and squeezes and squeaks on every tap.
+- **Away from home**, put the PC and the phone on [Tailscale](https://tailscale.com) and type the
+  PC's Tailscale name into the address field; the beacon only reaches the local network.
+
+Measured on the PC and an Android emulator on it (October 2026): the PC's echo of your line in a few
+milliseconds, the first sentence on the phone 1.3 s after sending, and the first sentence's audio
+about 1.5 s after its text, as Kokoro renders it. A spoken question from the phone was written down
+and answered on the PC in 3.2 s, most of it the first transcription's check that the speech model
+is downloaded.
+
+### How it talks to the PC
+
+`scripts/remote.gd`, the Remote node in `pet.tscn`, is a WebSocket server on port 39842 (a
+`TCPServer` with `WebSocketPeer.accept_stream`, no add-on) and broadcasts `duck 39842 <name>` by
+UDP to port 39843 once a second. Text frames are JSON; binary frames are audio, a kind byte, the
+sentence's index as a little-endian uint32, then a WAV.
+
+| From | Frame | |
+| --- | --- | --- |
+| phone | `{"hello": code, "name": phone}` | first; a wrong code gets `{"bye": "wrong code"}` and the socket closes |
+| PC | `{"welcome": duck name, "ready", "status", "speaks", "recent"}` | `recent` is the last six messages, so the phone shows where the conversation was |
+| phone | `{"say": line}`, or audio kind 1 | typed, or a spoken sentence for the PC to transcribe |
+| PC | `{"you": line}` | the turn began; after a recording, what was heard (`""` with `"error"` when nothing was) |
+| PC | `{"sentence": text, "index": n}`, then audio kind 2 for `n` | each sentence as it is written, then its Kokoro audio |
+| PC | `{"replied": text, "notes": ...}` | the whole answer and what the duck remembered |
+| PC | `{"status": text, "ready": bool}`, `{"busy": true}` | the brain waking; a turn already under way |
+| phone | `{"ping": t}` every 5 s | answered `{"pong": t}`; three missed and the phone reconnects |
+
+The phone app is `scenes/remote.tscn` with `scripts/remote_app.gd`, in this same project. Android
+opens it instead of the pet through feature-tag overrides in `project.godot`
+(`run/main_scene.android`, and `.android` versions of the window settings, so the phone gets an
+ordinary portrait window rather than the PC's 144 px transparent one).
+
+### Building it
+
+Godot exports the APK; it needs the Android SDK and a JDK, set in the editor's Export > Android
+settings, and the export templates for this exact Godot build (4.8-dev6). On this PC: Temurin JDK
+21, the SDK in `%LOCALAPPDATA%\Android\Sdk` with `build-tools;36.1.0` and `platforms;android-36`
+(what Godot 4.8 asks for; install them with the SDK's `cmdline-tools\latest\bin\sdkmanager.bat`,
+passing the package name in a `--package_file`, since a `.bat` splits it at the semicolon), and the
+templates from the `4.8-dev6` release of godot-builds. Then:
+
+```powershell
+& 'C:\Godot\godot.exe' --headless --path . --export-debug "Android" build/duck.apk
+adb install -r build/duck.apk
+```
+
+The `Android` preset in `export_presets.cfg` builds for arm64 phones and x86_64 emulators, asks for
+the internet, Wi-Fi state and microphone permissions, and leaves the tests, tools and seed out.
+`tools/make_icon.gd` renders the duck into the app's icon. To try it without a phone, run an
+Android Studio emulator and `tools/remote_host.gd` on the PC: the emulator reaches the PC at
+`10.0.2.2` (its own network does not carry the beacon), and the host prints the code. To check the
+PC side without any phone, `tools/remote_client.gd` pairs, sends a line (or a recording, with
+`DUCK_WAV`) and prints every frame with its timing.
+
 ## How it picks the NPU, GPU or CPU
 
 Foundry Local chooses. Asked for a model alias, it downloads the variant built for the best
@@ -516,13 +627,17 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Mind` | `fact_topics`, `fact_search_wait` | What it searches for new facts, in turn; 300 s before trying again after a search found none |
 | `Listener` | `language` | empty, so the system language |
 | `Listener` | `speech_threshold_db`, `pause_seconds` | -40 dB, 1.2 s |
+| `Remote` | `enabled`, `port`, `beacon_port`, `speak_here_too` | on, 39842, 39843, off: the phone speaks the phone's turns |
 | `Squeak` | `stream` | the four squeaks, picked at random |
+| `FastSqueak` | `stream` | the five quick squeaks for a throw and a hard bounce, picked at random |
 
 ## Layout
 
 ```
 scenes/pet.tscn             the pet window: the duck's viewport, Brain, Voice, ScreenReader, and the Bubble with its tabs
-scenes/duck.tscn            the 3D duck, its camera and lights
+scenes/duck.tscn            the 3D duck, its camera and lights, and its optional hat
+scenes/hat.tscn             the captain's hat with its material
+assets/hat/                 the captain's hat model and textures
 scripts/pet.gd              edge walking, dragging, the bubble, greetings, stats and voice settings
 scripts/duck.gd             the duck's poses and animations
 scripts/brain.gd            starts Foundry Local, picks the models, builds each prompt and checks each sentence
@@ -534,6 +649,12 @@ scripts/model_preferences.gd  the ranked model lists and the memory budget
 resources/model_preferences.tres  the lists themselves, edited in the inspector
 scripts/screen_reader.gd    captures the screen and reads it with the system OCR
 scripts/searcher.gd         looks things up on DuckDuckGo when asked to
+scripts/remote.gd           lets the phone app talk to the duck: the WebSocket server and the beacon
+scenes/remote.tscn          the phone app: the duck on top, the chat below
+scripts/remote_app.gd       the phone app's pairing, chat, voice and the duck's moods
+scripts/suds.gd             the bubble bath's foam, round the duck and floating about
+assets/water/               the phone's bath: the water, the bubbles and the suds shaders
+export_presets.cfg          the Android export
 scripts/voice.gd            speaks through the system's TTS voices or Kokoro's, and saves the chosen one
 scripts/kokoro.gd           downloads and runs the natural Kokoro voices
 tools/kokoro_server/        the program that keeps Kokoro's model loaded, and its build script
@@ -548,6 +669,9 @@ tools/npu_tops.py           the TOPS report as a standalone script
 tools/model_shot.gd         renders a model from four sides
 tools/inspect_model.gd      prints a model's nodes, size, materials and animations
 tools/debug_bench.gd        scores the duck at debugging and times it, against the real model
+tools/remote_host.gd        a headless duck for a phone or an emulator to talk to
+tools/remote_client.gd      a phone on the command line, to check the PC side
+tools/make_icon.gd          renders the duck into the app's icon
 tests/unit/                 GUT tests
 tests/fixtures/             Foundry's real catalog output, DuckDuckGo result pages, and OCR of an editor
 ```
@@ -571,7 +695,9 @@ scene's wiring, tabs and input box; the greetings and the Stats text; blanking t
 windows out of the capture and tidying the OCR text; the TOPS lookups and arithmetic; the brain's
 handling of Foundry Local's responses and of the screen text; the streamed reply's events, the
 sentence checks and the slim debugging prompt; the code checks and the error-first screen text;
-Kokoro's sentence queue; and choosing, saving and falling back between voices. They do not need Foundry Local installed, and headless Godot has no text-to-speech
+Kokoro's sentence queue; the phone link's frames, pairing and beacon, a real WebSocket over
+loopback, and the phone app's scene and Android settings; and choosing, saving and falling back
+between voices. They do not need Foundry Local installed, and headless Godot has no text-to-speech
 or screen, so they also show those missing stays quiet rather than failing.
 
 Things found the hard way:
