@@ -1,53 +1,78 @@
 class_name Pomodoro
-extends VBoxContainer
-## The Pomodoro tab: focus for 25 minutes, break for 5, and after every fourth focus a 15 minute
-## break, round and round until stopped. The duck is a tomato while it runs. Said or typed
-## ("start a pomodoro", "a 50 minute pomodoro", "pause the pomodoro", "how long is left on the
-## pomodoro?"), the pet hands the line to `request_in` and what it finds to `carry_out`, and the
-## duck answers without asking the model.
+extends Node
+## The Pomodoro timer: focus for 25 minutes, break for 5, and after every fourth focus a 15 minute
+## break, round and round until stopped. The duck is a tomato while it runs. Said or typed ("start a
+## pomodoro", "a 50 minute pomodoro", "pause the pomodoro", "how long is left on the pomodoro?"),
+## the host hands the line to `request_in` and what it finds to `carry_out`, and the duck answers
+## without asking the model.
+##
+## This is the timer alone. Its tab is in DuckTabs, on the PC and on the phone alike, and shows
+## `state()`: on the PC straight from here, on a paired phone from the PC.
 
-## Any change: started, stopped, or on to the next phase.
+## Any change of phase: started, stopped, or on to the next one.
 signal phase_changed(phase: Phase)
-## A phase ran out and `next` began; the pet says so.
+## A phase ran out and `next` began; the host says so.
 signal time_up(next: Phase)
+## Anything the tab shows changed: a phase, a pause or a resume, or a length.
+signal changed
 
 enum Phase { OFF, FOCUS, SHORT_BREAK, LONG_BREAK }
 
 ## Focus rounds before a long break.
 @export var rounds: int = 4
-
 ## Where the lengths are kept, beside the hat, the voice and the microphone.
-const SETTINGS_PATH: String = "user://settings.cfg"
+@export var settings_path: String = "user://settings.cfg"
+
 ## A word for "pomodoro" as a line must name it, including the ways speech-to-text spells it.
 const NAMES: String = r"(?i)\b(?:pom+[oa]dor+o?s?|tomato\s+(?:timer|mode|time)|focus\s+(?:timer|session))\b"
 const NUMBER_WORDS: Dictionary[String, int] = {
 	"five": 5, "ten": 10, "fifteen": 15, "twenty": 20, "twenty five": 25, "twenty-five": 25,
 	"thirty": 30, "forty": 40, "forty five": 45, "forty-five": 45, "fifty": 50, "sixty": 60, "ninety": 90,
 }
+## [focus, short break, long break] in minutes, and the most each may be.
+const DEFAULT_LENGTHS: Array[int] = [25, 5, 15]
+const MAX_LENGTHS: Array[int] = [180, 60, 90]
 
 var phase: Phase = Phase.OFF
 ## Focus rounds finished since it was started.
 var finished: int = 0
+## [focus, short break, long break] in minutes.
+var lengths: Array[int] = DEFAULT_LENGTHS.duplicate()
+## When the phase under way ends, in Unix seconds, and how long it is. A phone puts an app to sleep
+## in the background, and a Timer sleeps with it, so on waking the timer catches up by the clock.
+var _ends_at: float = 0.0
+var _length: float = 0.0
 
 @onready var phase_timer: Timer = $PhaseTimer
-@onready var tick: Timer = $Tick
-@onready var phase_label: Label = $Phase
-@onready var time_label: Label = $Time
-@onready var bar: ProgressBar = $Bar
-@onready var start_button: Button = $Buttons/Start
-@onready var skip_button: Button = $Buttons/Skip
-@onready var stop_button: Button = $Buttons/Stop
-@onready var focus_box: SpinBox = $Lengths/Focus
-@onready var short_box: SpinBox = $Lengths/Short
-@onready var long_box: SpinBox = $Lengths/Long
 
 
 func _ready() -> void:
-	var lengths: Array[int] = load_lengths(SETTINGS_PATH, [int(focus_box.value), int(short_box.value), int(long_box.value)])
-	focus_box.set_value_no_signal(lengths[0])
-	short_box.set_value_no_signal(lengths[1])
-	long_box.set_value_no_signal(lengths[2])
-	_show()
+	lengths = load_lengths(settings_path, DEFAULT_LENGTHS)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		catch_up(Time.get_unix_time_from_system())
+
+
+## Brings the timer up to `now`: the phases that ran out while the app slept are over, and only
+## the one under way now is announced.
+func catch_up(now: float) -> void:
+	if not is_running() or is_paused():
+		return
+	if _ends_at > now:
+		phase_timer.start(_ends_at - now)
+		return
+	while _ends_at <= now:
+		if phase == Phase.FOCUS:
+			finished += 1
+		phase = next_phase(phase, finished, rounds)
+		_length = minutes_for(phase) * 60.0
+		_ends_at += _length
+	phase_timer.start(_ends_at - now)
+	phase_changed.emit(phase)
+	changed.emit()
+	time_up.emit(phase)
 
 
 func is_running() -> bool:
@@ -70,24 +95,22 @@ func start(minutes: int = 0) -> void:
 
 func stop() -> void:
 	phase_timer.stop()
-	tick.stop()
 	phase_timer.paused = false
 	phase = Phase.OFF
 	finished = 0
-	_show()
 	phase_changed.emit(phase)
+	changed.emit()
 
 
 func pause() -> void:
 	phase_timer.paused = true
-	tick.stop()
-	_show()
+	changed.emit()
 
 
 func resume() -> void:
 	phase_timer.paused = false
-	tick.start()
-	_show()
+	_ends_at = Time.get_unix_time_from_system() + phase_timer.time_left
+	changed.emit()
 
 
 ## Ends the phase under way now, as though its time were up.
@@ -96,15 +119,53 @@ func skip() -> void:
 		_on_phase_timer_timeout()
 
 
+## What the tab's buttons ask for: start, pause, resume, skip or stop.
+func act(action: String) -> void:
+	match action:
+		"start":
+			start()
+		"pause":
+			if is_running() and not is_paused():
+				pause()
+		"resume":
+			if is_paused():
+				resume()
+		"skip":
+			skip()
+		"stop":
+			if is_running():
+				stop()
+
+
+## Sets the three lengths and keeps them; the phase under way keeps its own.
+func set_lengths(minutes: Array[int]) -> void:
+	lengths = clamped_lengths(minutes)
+	save_lengths(settings_path, lengths)
+	changed.emit()
+
+
 func minutes_for(which: Phase) -> int:
 	match which:
 		Phase.FOCUS:
-			return int(focus_box.value)
+			return lengths[0]
 		Phase.SHORT_BREAK:
-			return int(short_box.value)
+			return lengths[1]
 		Phase.LONG_BREAK:
-			return int(long_box.value)
+			return lengths[2]
 	return 0
+
+
+## What the tab shows: {phase, title, left and length in seconds, running, paused, lengths}.
+func state() -> Dictionary:
+	return {
+		"phase": phase,
+		"title": title_for(phase, finished, rounds),
+		"left": phase_timer.time_left if is_running() else 0.0,
+		"length": _length if is_running() else lengths[0] * 60.0,
+		"running": is_running(),
+		"paused": is_paused(),
+		"lengths": lengths.duplicate(),
+	}
 
 
 ## Does what `request_in` found and returns what the duck says about it.
@@ -142,11 +203,12 @@ func carry_out(request: Dictionary) -> String:
 
 func _begin(next: Phase, minutes: int) -> void:
 	phase = next
+	_length = maxi(minutes, 1) * 60.0
+	_ends_at = Time.get_unix_time_from_system() + _length
 	phase_timer.paused = false
-	phase_timer.start(maxi(minutes, 1) * 60.0)
-	tick.start()
-	_show()
+	phase_timer.start(_length)
 	phase_changed.emit(phase)
+	changed.emit()
 
 
 func _on_phase_timer_timeout() -> void:
@@ -155,41 +217,6 @@ func _on_phase_timer_timeout() -> void:
 	var next: Phase = next_phase(phase, finished, rounds)
 	_begin(next, minutes_for(next))
 	time_up.emit(next)
-
-
-func _on_tick_timeout() -> void:
-	_show()
-
-
-func _on_start_pressed() -> void:
-	if not is_running():
-		start()
-	elif is_paused():
-		resume()
-	else:
-		pause()
-
-
-func _on_skip_pressed() -> void:
-	skip()
-
-
-func _on_stop_pressed() -> void:
-	stop()
-
-
-func _on_length_changed(_value: float) -> void:
-	save_lengths(SETTINGS_PATH, [int(focus_box.value), int(short_box.value), int(long_box.value)])
-
-
-## The tab as things stand: the phase, the time left, how far through, and what Start does now.
-func _show() -> void:
-	phase_label.text = title_for(phase, finished, rounds) + (" (paused)" if is_paused() else "")
-	time_label.text = clock(seconds_left() if is_running() else minutes_for(Phase.FOCUS) * 60)
-	bar.value = 1.0 - phase_timer.time_left / phase_timer.wait_time if is_running() else 0.0
-	start_button.text = "Start" if not is_running() else ("Resume" if is_paused() else "Pause")
-	skip_button.disabled = not is_running()
-	stop_button.disabled = not is_running()
 
 
 ## What comes after `current`, `done` focus rounds in: a break after focus, the long one every
@@ -279,22 +306,30 @@ static func _has(line: String, pattern: String) -> bool:
 	return RegEx.create_from_string("(?i)" + pattern).search(line) != null
 
 
+## Three lengths, each at least a minute and at most its MAX_LENGTHS; the defaults for any missing.
+static func clamped_lengths(minutes: Array) -> Array[int]:
+	var kept: Array[int] = []
+	for i: int in DEFAULT_LENGTHS.size():
+		kept.append(clampi(int(minutes[i]) if i < minutes.size() else DEFAULT_LENGTHS[i], 1, MAX_LENGTHS[i]))
+	return kept
+
+
 ## [focus, short break, long break] in minutes from the settings file, `defaults` for any not there.
 static func load_lengths(path: String, defaults: Array[int]) -> Array[int]:
 	var config: ConfigFile = ConfigFile.new()
 	if config.load(path) != OK:
-		return defaults
-	return [
-		int(config.get_value("pomodoro", "focus", defaults[0])),
-		int(config.get_value("pomodoro", "short_break", defaults[1])),
-		int(config.get_value("pomodoro", "long_break", defaults[2])),
-	]
+		return defaults.duplicate()
+	return clamped_lengths([
+		config.get_value("pomodoro", "focus", defaults[0]),
+		config.get_value("pomodoro", "short_break", defaults[1]),
+		config.get_value("pomodoro", "long_break", defaults[2]),
+	])
 
 
-static func save_lengths(path: String, lengths: Array[int]) -> void:
+static func save_lengths(path: String, minutes: Array[int]) -> void:
 	var config: ConfigFile = ConfigFile.new()
 	config.load(path)
-	config.set_value("pomodoro", "focus", lengths[0])
-	config.set_value("pomodoro", "short_break", lengths[1])
-	config.set_value("pomodoro", "long_break", lengths[2])
+	config.set_value("pomodoro", "focus", minutes[0])
+	config.set_value("pomodoro", "short_break", minutes[1])
+	config.set_value("pomodoro", "long_break", minutes[2])
 	config.save(path)

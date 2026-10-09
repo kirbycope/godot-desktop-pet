@@ -19,6 +19,13 @@ signal turn_started(line: String)
 signal answered(text: String, notes: String)
 ## The captain's hat went on or came off, here or from the phone.
 signal hat_changed(on: bool)
+## The Settings tab's voices changed: the list (empty when only the note changed), the chosen one,
+## and the line under them, such as the natural voices' download progress.
+signal voices_changed(items: Array, chosen: String, note: String)
+## The Duck tab's name and memories changed.
+signal duck_shown(duck_name: String, memories: PackedStringArray)
+## The Stats tab's text changed.
+signal stats_changed(text: String)
 
 @export var speed: float = 60.0
 ## Pixels a second squared pulling the duck down when it is dropped or thrown.
@@ -109,9 +116,8 @@ var _quiet: bool = false
 var _greeting: String = ""
 ## What the duck remembered or learned since the last answer, shown under the next one.
 var _notes: Array[String] = []
-## The answer being spoken, and the tween that scrolls it along.
+## The answer being spoken, glided through once as it is said.
 var _spoken: String = ""
-var _scroll_tween: Tween
 ## Whether its place is the dock rather than the edges: while the Pomodoro timer runs.
 var _docked: bool = false
 ## The glide to the dock.
@@ -128,8 +134,8 @@ var _glide: Tween
 ## Quick squeaks, one of five, for a throw and a hard bounce.
 @onready var fast_squeak: AudioStreamPlayer = $FastSqueak
 @onready var bubble: Window = $Bubble
-@onready var tabs: TabContainer = $Bubble/Panel/Margin/Tabs
-@onready var bubble_text: RichTextLabel = $Bubble/Panel/Margin/Tabs/Chat/Text
+## The bubble's tabs, the same scene as the phone app's (scenes/duck_tabs.tscn).
+@onready var tabs: DuckTabs = $Bubble/Panel/Margin/Tabs
 @onready var bubble_input: LineEdit = $Bubble/Panel/Margin/Tabs/Chat/Entry/Input
 @onready var send_button: Button = $Bubble/Panel/Margin/Tabs/Chat/Entry/Send
 @onready var mic_button: Button = $Bubble/Panel/Margin/Tabs/Chat/Entry/Mic
@@ -139,17 +145,8 @@ var _glide: Tween
 @onready var level_meter: ProgressBar = $Bubble/Panel/Margin/Tabs/Chat/Entry/Status/Row/Level
 @onready var listen_timer: Timer = $ListenTimer
 @onready var wake_clock: Timer = $WakeClock
-@onready var stats: RichTextLabel = $Bubble/Panel/Margin/Tabs/Stats
-@onready var voices: OptionButton = $Bubble/Panel/Margin/Tabs/Settings/Voices
-@onready var current_voice: Label = $Bubble/Panel/Margin/Tabs/Settings/Current
-@onready var test_button: Button = $Bubble/Panel/Margin/Tabs/Settings/Buttons/Test
-@onready var apply_button: Button = $Bubble/Panel/Margin/Tabs/Settings/Buttons/Apply
-@onready var mics: OptionButton = $Bubble/Panel/Margin/Tabs/Settings/MicRow/Mics
 @onready var mind: Mind = $Mind
-@onready var name_field: LineEdit = $Bubble/Panel/Margin/Tabs/Duck/NameRow/Name
-@onready var memory_list: ItemList = $Bubble/Panel/Margin/Tabs/Duck/Memories
-@onready var hat_box: CheckBox = $Bubble/Panel/Margin/Tabs/Duck/HatRow/Hat
-@onready var pomodoro: Pomodoro = $Bubble/Panel/Margin/Tabs/Pomodoro
+@onready var pomodoro: Pomodoro = $Pomodoro
 @onready var menu: PopupMenu = $Menu
 
 
@@ -163,6 +160,8 @@ func _ready() -> void:
 	_fill_mics()
 	_fill_mind()
 	set_hat(load_hat(SETTINGS_PATH))
+	tabs.show_conversation(Remote.shown(mind.conversation(mind.conversation_id())))
+	tabs.show_pomodoro(pomodoro.state())
 	_update_stats()
 
 
@@ -331,20 +330,21 @@ func _open_bubble() -> void:
 	tabs.current_tab = 0
 	_update_stats()
 	if not brain.is_ready():
+		# The status line says how the waking up is going.
 		duck.play(&"sleep")
-		bubble_text.text = "Zzz... I'm still waking up. Give me a moment and I'll be right with you."
 	elif is_thinking():
 		duck.play(&"think")
 	else:
 		# Squeak first; the greeting is shown now and said once the squeak is over.
 		_greeting = greetings.pick_random() if not greetings.is_empty() else "Quack!"
-		bubble_text.text = _greeting
+		tabs.say(_greeting)
 		duck.play(&"squeeze")
 		squeak.play()
 	_place_bubble()
 	bubble.show()
 	bubble.grab_focus()
 	bubble_input.grab_focus()
+	tabs.scroll_to_end()
 
 
 ## Over the duck, or under it where there is no room above, as in the dock.
@@ -404,7 +404,10 @@ func _say(text: String) -> void:
 
 ## The Stats tab, and whether the chat input is open yet.
 func _update_stats() -> void:
-	stats.text = stats_text(brain.status, brain.hardware, brain.model_id, _voice_name(voice.voice_id), screen_note, brain.choice, timing_text(brain.timings, _read_ms))
+	var shown: String = stats_text(brain.status, brain.hardware, brain.model_id, _voice_name(voice.voice_id), screen_note, brain.choice, timing_text(brain.timings, _read_ms))
+	if shown != tabs.stats.text:
+		tabs.stats.text = shown
+		stats_changed.emit(shown)
 	# Nothing to type into until it is awake, and nothing to send while it is thinking.
 	bubble_input.editable = brain.is_ready()
 	send_button.disabled = not brain.is_ready() or is_thinking()
@@ -419,100 +422,68 @@ func is_thinking() -> bool:
 
 
 ## The system's voices, then the natural Kokoro ones: greyed out with a download entry above them
-## until they are installed, then white like the rest.
+## until they are installed, then white like the rest. The phone gets the same list.
 func _fill_voices() -> void:
-	voices.clear()
-	var kokoro_ready: bool = voice.kokoro_ready()
-	var kokoro_listed: bool = false
-	for entry: Dictionary in voice.available():
-		if entry.get("kokoro", false) and not kokoro_listed:
-			kokoro_listed = true
-			voices.add_separator("Natural voices (Kokoro)")
-			if not kokoro_ready:
-				var installing: bool = voice.kokoro.is_installing()
-				voices.add_item("Downloading natural voices..." if installing else "Download natural voices (%d MB)" % Kokoro.download_mb())
-				voices.set_item_metadata(voices.item_count - 1, DOWNLOAD_KOKORO)
-				voices.set_item_disabled(voices.item_count - 1, installing)
-		voices.add_item(Voice.label_for(entry) if not entry.get("kokoro", false) else entry["name"])
-		voices.set_item_metadata(voices.item_count - 1, entry["id"])
-		if entry.get("kokoro", false) and not kokoro_ready:
-			voices.set_item_disabled(voices.item_count - 1, true)
-		if entry["id"] == voice.voice_id:
-			voices.select(voices.item_count - 1)
-	voices.disabled = voices.item_count == 0
-	if voice.kokoro != null and voice.kokoro.is_installing():
-		# Stay on the download entry, which shows the progress, while it downloads.
-		voices.select(_download_index())
-		voices.set_item_text(_download_index(), _download_text)
-	elif voices.item_count == 0:
-		current_voice.text = "This system offers no text-to-speech voices."
-	else:
-		current_voice.text = "Speaking as: " + _voice_name(voice.voice_id)
-	_update_voice_buttons()
-
-
-## Test and Apply are grey unless the selected voice can speak now.
-func _update_voice_buttons() -> void:
-	var index: int = voices.selected
-	var usable: bool = index >= 0 and not voices.is_item_disabled(index) and str(voices.get_item_metadata(index)) != DOWNLOAD_KOKORO
-	test_button.disabled = not usable
-	apply_button.disabled = not usable
+	var installing: bool = voice.kokoro != null and voice.kokoro.is_installing()
+	var download: String = _download_text if installing else "Download natural voices (%d MB)" % Kokoro.download_mb()
+	var items: Array[Dictionary] = DuckTabs.voice_items(voice.available(), voice.kokoro_ready(), installing, download)
+	var note: String = "Speaking as: " + _voice_name(voice.voice_id)
+	if installing:
+		note = _download_text
+	elif items.is_empty():
+		note = "This system offers no text-to-speech voices."
+	# While it downloads the list stays on the download entry, which shows the progress.
+	var chosen: String = DuckTabs.DOWNLOAD_KOKORO if installing else voice.voice_id
+	tabs.show_voices(items, chosen, note)
+	_shown_voices = {"items": items, "chosen": chosen, "note": note}
+	voices_changed.emit(items, chosen, note)
 
 
 ## Choosing the download entry starts the download.
-func _on_voice_selected(index: int) -> void:
-	if str(voices.get_item_metadata(index)) == DOWNLOAD_KOKORO:
+func _on_voice_selected(id: String) -> void:
+	if id == DuckTabs.DOWNLOAD_KOKORO:
+		download_voices()
+
+
+## Starts downloading the natural voices, from here or the phone.
+func download_voices() -> void:
+	if voice.kokoro != null and not voice.kokoro.is_installing() and not voice.kokoro_ready():
 		voice.kokoro.install()
+		_download_text = "Starting the download..."
 		_fill_voices()
-		current_voice.text = "Starting the download..."
-	_update_voice_buttons()
 
 
 func _on_kokoro_progress(_fraction: float, text: String) -> void:
 	_download_text = text
-	current_voice.text = text
-	if _download_index() >= 0:
-		voices.set_item_text(_download_index(), text)
-
-
-## The download entry's place in the voice list, or -1 once the voices are installed.
-func _download_index() -> int:
-	for i: int in voices.item_count:
-		if str(voices.get_item_metadata(i)) == DOWNLOAD_KOKORO:
-			return i
-	return -1
+	_shown_voices["note"] = text
+	tabs.show_voice_note(text, true)
+	voices_changed.emit([], "", text)
 
 
 func _on_kokoro_installed() -> void:
 	_fill_voices()
-	current_voice.text = "Natural voices ready: pick one."
+	tabs.show_voice_note("Natural voices ready: pick one.")
 
 
 func _on_kokoro_failed(message: String) -> void:
 	_fill_voices()
-	current_voice.text = message
+	tabs.show_voice_note(message)
 
 
 func _fill_mics() -> void:
-	mics.clear()
 	# The saved choice, since AudioServer reports "Default" until the microphone first opens.
 	var chosen: String = Listener.load_device(Listener.SETTINGS_PATH)
-	if chosen.is_empty():
-		chosen = AudioServer.input_device
-	for device: String in AudioServer.get_input_device_list():
-		mics.add_item(device)
-		if device == chosen:
-			mics.select(mics.item_count - 1)
+	tabs.show_mics(AudioServer.get_input_device_list(), chosen if not chosen.is_empty() else AudioServer.input_device)
 
 
-func _on_mic_selected(index: int) -> void:
-	listener.use_device(mics.get_item_text(index))
+func _on_mic_selected(device: String) -> void:
+	listener.use_device(device)
 
 
-## Stands for the download entry in the voice list's metadata.
-const DOWNLOAD_KOKORO: String = "kokoro:download"
 ## The latest download progress, shown on the download entry while it downloads.
 var _download_text: String = "Downloading natural voices..."
+## The Settings tab's voices as last shown, for a phone that pairs.
+var _shown_voices: Dictionary = {}
 
 
 func _voice_name(id: String) -> String:
@@ -520,11 +491,6 @@ func _voice_name(id: String) -> String:
 		if entry["id"] == id:
 			return entry.get("name", id)
 	return "none"
-
-
-func _selected_voice() -> String:
-	var id: String = str(voices.get_selected_metadata()) if voices.selected >= 0 else ""
-	return "" if id == DOWNLOAD_KOKORO else id
 
 
 func _on_idle_timer_timeout() -> void:
@@ -538,22 +504,17 @@ func _on_voice_started() -> void:
 	if state == State.CHAT:
 		duck.play(&"talk")
 		# Once per answer, when the whole of it is known; it starts on its first sentence.
-		if not _spoken.is_empty() and (_scroll_tween == null or not _scroll_tween.is_running()):
-			_scroll_along(_spoken)
+		_glide_spoken()
 	_update_status()
 
 
-## Glides the answer from the top to the bottom over about as long as it takes to say, so a long
-## answer can be read all the way through as it is spoken. The wheel still scrolls it by hand.
-func _scroll_along(text: String) -> void:
-	var bar: VScrollBar = bubble_text.get_v_scroll_bar()
-	if _scroll_tween != null:
-		_scroll_tween.kill()
-	var end: float = maxf(bar.max_value - bar.page, 0.0)
-	if end <= 0.0:
+## Glides the chat through the answer being said, once, over about as long as it takes to say, so
+## a long answer can be read all the way through as it is spoken.
+func _glide_spoken() -> void:
+	if _spoken.is_empty():
 		return
-	_scroll_tween = create_tween()
-	_scroll_tween.tween_property(bar, "value", end, scroll_seconds(text)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tabs.glide_to_end(scroll_seconds(_spoken))
+	_spoken = ""
 
 
 ## Speech runs near 14 characters a second; the first second or so is the top of the answer.
@@ -603,7 +564,7 @@ func _on_brain_status_changed(_text: String) -> void:
 	elif state == State.CHAT and _last_line.is_empty():
 		# Awake with the bubble open: say hello properly now.
 		_greeting = "I'm awake! " + (greetings.pick_random() if not greetings.is_empty() else "Quack!")
-		bubble_text.text = _greeting
+		tabs.say(_greeting)
 		duck.play(&"squeeze")
 		squeak.play()
 		bubble_input.grab_focus()
@@ -614,10 +575,24 @@ func _on_wake_clock_timeout() -> void:
 	_update_status()
 
 
-## Another conversation is under way, started or taken up from the phone: its old answer goes.
-func _on_brain_conversation_changed(_id: String) -> void:
+## Another conversation is under way, started or taken up here or from the phone: the chat shows it.
+func _on_brain_conversation_changed(id: String) -> void:
 	_last_line = ""
-	bubble_text.text = ""
+	tabs.show_conversation(Remote.shown(mind.conversation(id)))
+
+
+func _on_tabs_new_pressed() -> void:
+	if not brain.new_conversation():
+		tabs.add_note("Not while I'm answering.")
+
+
+func _on_tabs_past_pressed() -> void:
+	tabs.show_past(mind.conversations(), mind.conversation_id())
+
+
+func _on_tabs_conversation_chosen(id: String) -> void:
+	if not brain.open_conversation(id):
+		tabs.add_note("Not while I'm answering.")
 
 
 ## A line from the phone: the same turn as one typed here, screen read and all. `quiet` leaves the
@@ -632,24 +607,23 @@ func send_remote(line: String, quiet: bool) -> bool:
 
 ## A sentence of the answer, as soon as it is written: shown, and said after the one before.
 func _on_brain_sentence(text: String) -> void:
+	tabs.add_sentence(text)
 	if not _streamed:
 		_streamed = true
-		bubble_text.text = "You: %s\n\n%s" % [_last_line, text] if not _last_line.is_empty() else text
-		bubble_text.scroll_to_line(0)
 		if state == State.CHAT and not _quiet:
 			_say(text)
 		return
-	bubble_text.text += " " + text
 	if state == State.CHAT and not _quiet:
 		voice.add(text)
 		listen_timer.start(listen_timer.time_left + text.length() / 14.0)
 
 
 func _on_brain_replied(text: String) -> void:
-	var notes: String = _take_notes()
-	bubble_text.text = ("You: %s\n\n%s" % [_last_line, text] if not _last_line.is_empty() else text) + notes
+	var notes: String = _take_notes().strip_edges().trim_prefix("(").trim_suffix(")")
+	tabs.set_answer(text)
+	tabs.add_note(notes)
 	_update_stats()
-	answered.emit(text, notes.strip_edges().trim_prefix("(").trim_suffix(")"))
+	answered.emit(text, notes)
 	if _quiet:
 		# The phone said it; here the mic, if it was on, comes back now.
 		_quiet = false
@@ -661,10 +635,9 @@ func _on_brain_replied(text: String) -> void:
 	match after_answer(_streamed, voice.is_speaking()):
 		&"say":
 			# Nothing came as sentences, such as "my brain did not answer": say it whole.
-			bubble_text.scroll_to_line(0)
 			_say(text)
 		&"scroll":
-			_scroll_along(text)
+			_glide_spoken()
 		&"listen":
 			_done_talking()
 	bubble_input.grab_focus()
@@ -681,29 +654,38 @@ static func after_answer(streamed: bool, speaking: bool) -> StringName:
 	return &"scroll" if speaking else &"listen"
 
 
-func _on_test_pressed() -> void:
-	voice.speak(test_line, _selected_voice())
+func _on_test_pressed(id: String) -> void:
+	test_voice(id)
 
 
-func _on_apply_pressed() -> void:
-	var id: String = _selected_voice()
+func _on_apply_pressed(id: String) -> void:
+	apply_voice(id)
+
+
+## Says the test line in voice `id` here, without changing the duck's voice.
+func test_voice(id: String) -> void:
+	if not id.is_empty():
+		voice.speak(test_line, id)
+
+
+## Makes `id` the duck's voice, here and for the phone.
+func apply_voice(id: String) -> void:
 	if id.is_empty():
 		return
 	voice.apply(id)
-	current_voice.text = "Speaking as: " + _voice_name(id)
+	_fill_voices()
 	_update_stats()
 
 
-func _on_send_pressed() -> void:
-	_on_input_text_submitted(bubble_input.text)
+## The Settings tab's voices as last shown: {items, chosen, note}, for a phone that pairs.
+func shown_voices() -> Dictionary:
+	return _shown_voices
 
 
-func _on_input_text_submitted(text: String) -> void:
-	var line: String = text.strip_edges()
-	if line.is_empty() or is_thinking():
-		return
-	bubble_input.clear()
-	_send(line)
+## Typed and sent: Enter, or Send.
+func _on_tabs_line_sent(line: String) -> void:
+	if not is_thinking():
+		_send(line)
 
 
 ## Typed or spoken, a line goes the same way: look at the screen, then ask. A line sent before the
@@ -731,10 +713,10 @@ func _send(line: String) -> void:
 	# "Search for ...", "look up ...": the web first, then the screen as always.
 	var query: String = Searcher.query_in(line)
 	if not query.is_empty():
-		bubble_text.text = "You: %s\n\nSearching DuckDuckGo for %s..." % [line, query]
+		tabs.begin_answer(line, "Searching DuckDuckGo for %s..." % query)
 		searcher.search(query)
 	else:
-		bubble_text.text = "You: %s\n\nLooking at your screen..." % line
+		tabs.begin_answer(line, "Looking at your screen...")
 		_look_or_reuse()
 	_update_stats()
 
@@ -745,8 +727,7 @@ func _answer_here(line: String, text: String) -> void:
 	_last_line = line
 	_greeting = ""
 	squeak.stop()
-	bubble_text.text = "You: %s\n\n%s" % [line, text]
-	bubble_text.scroll_to_line(0)
+	tabs.begin_answer(line, text)
 	answered.emit(text, "")
 	if _quiet:
 		_quiet = false
@@ -785,7 +766,7 @@ func _on_pomodoro_time_up(next: Pomodoro.Phase) -> void:
 		if is_thinking() or voice.is_speaking():
 			voice.add(text)
 		else:
-			bubble_text.text = text
+			tabs.say(text)
 			_say(text)
 		return
 	if state == State.DOCK:
@@ -805,7 +786,7 @@ func _on_searcher_searched(results: Array[Dictionary]) -> void:
 		_notes.append(Searcher.as_sources(results))
 	elif not searcher.last_error.is_empty():
 		_notes.append(searcher.last_error)
-	bubble_text.text = "You: %s\n\nLooking at your screen..." % _last_line
+	tabs.set_answer("Looking at your screen...")
 	_look_or_reuse()
 
 
@@ -857,7 +838,7 @@ func _on_screen_reader_read_finished(text: String) -> void:
 	screen_note = screen_reader.last_error if not screen_reader.last_error.is_empty() else "%d characters read last time" % text.length()
 	if _read_ms < 0:
 		_read_ms = Time.get_ticks_msec() - _look_started
-	bubble_text.text = "You: %s\n\n..." % _last_line
+	tabs.set_answer("...")
 	_streamed = false
 	_spoken = ""
 	brain.ask(_pending_line, text, _web_text)
@@ -874,7 +855,7 @@ func _on_mic_toggled(on: bool) -> void:
 	listener.foundry_path = brain.foundry_path()
 	listener.model_alias = brain.speech_name
 	if listener.model_alias.is_empty():
-		bubble_text.text = "No speech model fits this machine, or I am still waking up." if brain.is_ready() else "Still waking up. Try the mic again in a moment."
+		tabs.add_note("No speech model fits this machine, or I am still waking up." if brain.is_ready() else "Still waking up. Try the mic again in a moment.")
 		mic_button.set_pressed_no_signal(false)
 		return
 	listener.start()
@@ -887,7 +868,7 @@ func _on_mic_toggled(on: bool) -> void:
 func _on_listener_heard(text: String) -> void:
 	if text.is_empty():
 		if not listener.last_error.is_empty():
-			bubble_text.text = listener.last_error
+			tabs.add_note(listener.last_error)
 		listener.resume()
 		return
 	_send(text)
@@ -931,7 +912,7 @@ func _on_bubble_window_input(event: InputEvent) -> void:
 func set_hat(on: bool) -> void:
 	duck.hat = on
 	_update_passthrough()
-	hat_box.set_pressed_no_signal(on)
+	tabs.show_hat(on)
 	save_hat(SETTINGS_PATH, on)
 	hat_changed.emit(on)
 
@@ -952,12 +933,11 @@ static func save_hat(path: String, on: bool) -> void:
 	config.save(path)
 
 
+## The Duck tab: its name and what it remembers, here and on the phone.
 func _fill_mind() -> void:
-	name_field.text = mind.duck_name()
 	bubble.title = mind.duck_name() if not mind.duck_name().is_empty() else "Rubber Duck"
-	memory_list.clear()
-	for memory: String in mind.memories():
-		memory_list.add_item(memory)
+	tabs.show_duck(mind.duck_name(), mind.memories())
+	duck_shown.emit(mind.duck_name(), mind.memories())
 
 
 ## Something was remembered, forgotten, learned or renamed. The Duck tab shows it at once; the
@@ -975,19 +955,17 @@ func _take_notes() -> String:
 	return text
 
 
-func _on_name_submitted(_text: String) -> void:
-	_on_save_name_pressed()
+func _on_name_saved(duck_name: String) -> void:
+	mind.set_duck_name(duck_name)
 
 
-func _on_save_name_pressed() -> void:
-	if not name_field.text.strip_edges().is_empty():
-		mind.set_duck_name(name_field.text)
+func _on_memory_forgotten(index: int) -> void:
+	mind.forget_at(index)
 
 
-func _on_forget_pressed() -> void:
-	var selected: PackedInt32Array = memory_list.get_selected_items()
-	if not selected.is_empty():
-		mind.forget_at(selected[0])
+## The timer changed: its tab shows it, here and (through Remote) on the phone.
+func _on_pomodoro_changed() -> void:
+	tabs.show_pomodoro(pomodoro.state())
 
 
 func _on_folder_pressed() -> void:

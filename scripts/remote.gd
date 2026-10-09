@@ -18,6 +18,11 @@ extends Node
 ##   phone: {"hat": true|false} puts the captain's hat on or off; PC: {"hat": bool} when it changes
 ##   phone: {"pomodoro": true|false} starts or stops the Pomodoro timer (its Timer button);
 ##   PC: {"tomato": bool} as the timer starts or stops, the duck a tomato while it runs
+## The phone shows the same tabs as the PC's bubble (DuckTabs), so it also gets, in the welcome and
+## as they change: {"pomodoro_state": Pomodoro.state()}, {"stats": text}, {"voices": items, "chosen",
+## "note"} or {"voice_note": text}, and {"duck_name", "memories"}. It sends {"pomodoro": action},
+## {"lengths": [focus, short, long]}, {"voice": id}, {"test_voice": id}, {"download_voices": true},
+## {"name": text} and {"forget": index}.
 ## Binary frames are audio: a kind byte, the sentence index as a little-endian uint32, then a WAV.
 ## The phone sends kind 1 (a sentence it heard, transcribed here); the PC sends kind 2 (a sentence
 ## spoken by Kokoro, for the phone to play).
@@ -161,9 +166,29 @@ func _on_text(client: Dictionary, frame: Dictionary) -> void:
 		if pet != null:
 			pet.set_hat(bool(frame["hat"]))
 	elif frame.has("pomodoro"):
-		# The phone's Timer button; every phone hears {"tomato": bool} as the timer starts or stops.
+		# The phone's Pomodoro tab: start, pause, resume, skip or stop (true and false from the
+		# Timer button of an older app). Every phone hears the timer's state as it changes.
 		if pet != null and pet.pomodoro != null:
-			pet.pomodoro.carry_out({"action": "start" if bool(frame["pomodoro"]) else "stop"})
+			var asked: Variant = frame["pomodoro"]
+			pet.pomodoro.act(str(asked) if asked is String else ("start" if bool(asked) else "stop"))
+	elif frame.has("lengths"):
+		if pet != null and pet.pomodoro != null and frame["lengths"] is Array:
+			pet.pomodoro.set_lengths(Pomodoro.clamped_lengths(frame["lengths"]))
+	elif frame.has("voice"):
+		if pet != null:
+			pet.apply_voice(str(frame["voice"]))
+	elif frame.has("test_voice"):
+		if pet != null:
+			pet.test_voice(str(frame["test_voice"]))
+	elif frame.has("download_voices"):
+		if pet != null:
+			pet.download_voices()
+	elif frame.has("name"):
+		if mind != null:
+			mind.set_duck_name(str(frame["name"]).left(40))
+	elif frame.has("forget"):
+		if mind != null:
+			mind.forget_at(int(frame["forget"]))
 	elif frame.has("new"):
 		if brain == null or not brain.new_conversation():
 			_send_to(client, {"busy": true})
@@ -241,6 +266,26 @@ func _on_pomodoro_phase_changed(phase: Pomodoro.Phase) -> void:
 	_broadcast({"tomato": phase != Pomodoro.Phase.OFF})
 
 
+## The timer's state for the phone's Pomodoro tab, which counts down from it.
+func _on_pomodoro_changed() -> void:
+	if pet != null and pet.pomodoro != null:
+		_broadcast({"pomodoro_state": pet.pomodoro.state()})
+
+
+## The phone's Settings tab shows the duck's voices; while the natural voices download, only the
+## note changes.
+func _on_pet_voices_changed(items: Array, chosen: String, note: String) -> void:
+	_broadcast({"voices": items, "chosen": chosen, "note": note} if not items.is_empty() else {"voice_note": note})
+
+
+func _on_pet_duck_shown(duck_name: String, memories: PackedStringArray) -> void:
+	_broadcast({"duck_name": duck_name, "memories": Array(memories)})
+
+
+func _on_pet_stats_changed(text: String) -> void:
+	_broadcast({"stats": text})
+
+
 func _on_brain_status_changed(text: String) -> void:
 	_broadcast({"status": text, "ready": brain.is_ready()})
 
@@ -256,11 +301,9 @@ func speaks() -> bool:
 	return voice != null and Kokoro.sid_of(voice.voice_id) >= 0 and voice.kokoro_ready()
 
 
+## What a phone gets as it pairs: everything its tabs show, the conversation as on the PC's Chat tab.
 func welcome() -> Dictionary:
-	var recent: Array = []
-	if mind != null:
-		for message: Dictionary in mind.recent(6):
-			recent.append({"role": message.get("role", ""), "content": message.get("content", "")})
+	var has_pet: bool = pet != null and pet.is_node_ready()
 	return {
 		"welcome": mind.duck_name() if mind != null else "",
 		"conversation": mind.conversation_id() if mind != null else "",
@@ -269,7 +312,11 @@ func welcome() -> Dictionary:
 		"ready": brain != null and brain.is_ready(),
 		"status": brain.status if brain != null else "",
 		"speaks": speaks(),
-		"recent": recent,
+		"recent": shown(mind.conversation(mind.conversation_id())) if mind != null else [],
+		"memories": Array(mind.memories()) if mind != null else [],
+		"pomodoro_state": pet.pomodoro.state() if has_pet else {},
+		"stats": pet.tabs.stats.text if has_pet else "",
+		"voices": pet.shown_voices() if has_pet else {},
 	}
 
 

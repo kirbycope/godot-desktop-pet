@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3]
+[gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/pet.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/duck.tscn" id="2"]
@@ -15,7 +15,6 @@
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_03.ogg" id="fast3"]
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_04.ogg" id="fast4"]
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_fast_05.ogg" id="fast5"]
-[ext_resource type="Texture2D" path="res://assets/icons/microphone.svg" id="11"]
 [ext_resource type="Resource" path="res://resources/model_preferences.tres" id="12"]
 [ext_resource type="Script" path="res://scripts/mind.gd" id="13"]
 [ext_resource type="Script" path="res://scripts/kokoro.gd" id="14"]
@@ -23,6 +22,7 @@
 [ext_resource type="Script" path="res://scripts/chat_stream.gd" id="16"]
 [ext_resource type="Script" path="res://scripts/remote.gd" id="17"]
 [ext_resource type="Script" path="res://scripts/pomodoro.gd" id="18"]
+[ext_resource type="PackedScene" path="res://scenes/duck_tabs.tscn" id="tabs"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_length"]
 bg_color = Color(1, 1, 0.94, 1)
@@ -62,20 +62,6 @@ Label/font_sizes/font_size = 13
 LineEdit/font_sizes/font_size = 13
 LineEdit/styles/focus = SubResource("StyleBoxFlat_length_focus")
 LineEdit/styles/normal = SubResource("StyleBoxFlat_length")
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pomodoro_bg"]
-bg_color = Color(0.9, 0.9, 0.9, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pomodoro_fill"]
-bg_color = Color(0.82, 0.14, 0.07, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bubble"]
 bg_color = Color(1, 1, 1, 0.97)
@@ -137,52 +123,54 @@ content_margin_top = 6.0
 content_margin_right = 8.0
 content_margin_bottom = 6.0
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_status"]
-bg_color = Color(1, 0.9, 0.9, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.85, 0.15, 0.15, 1)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-content_margin_left = 8.0
-content_margin_top = 3.0
-content_margin_right = 8.0
-content_margin_bottom = 3.0
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dot"]
-bg_color = Color(0.92, 0.1, 0.1, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(1, 1, 1, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_level_bg"]
-bg_color = Color(1, 1, 1, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_your_line"]
+bg_color = Color(0.16, 0.48, 0.96, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
 corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
+corner_radius_bottom_left = 12
+content_margin_left = 9.0
+content_margin_top = 5.0
+content_margin_right = 9.0
+content_margin_bottom = 5.0
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_level_fill"]
-bg_color = Color(0.85, 0.15, 0.15, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_duck_line"]
+bg_color = Color(0.91, 0.92, 0.94, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
 corner_radius_bottom_left = 3
+content_margin_left = 9.0
+content_margin_top = 5.0
+content_margin_right = 9.0
+content_margin_bottom = 5.0
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_tabs"]
 content_margin_top = 6.0
 
 [sub_resource type="Theme" id="Theme_bubble"]
+CheckBox/colors/font_color = Color(0.12, 0.14, 0.2, 1)
+CheckBox/colors/font_focus_color = Color(0.12, 0.14, 0.2, 1)
+CheckBox/colors/font_hover_color = Color(0.12, 0.14, 0.2, 1)
+CheckBox/colors/font_hover_pressed_color = Color(0.12, 0.14, 0.2, 1)
+CheckBox/colors/font_pressed_color = Color(0.12, 0.14, 0.2, 1)
+DuckBubble/base_type = &"PanelContainer"
+DuckBubble/styles/panel = SubResource("StyleBoxFlat_duck_line")
+DuckText/base_type = &"Label"
+DuckText/colors/font_color = Color(0.12, 0.14, 0.2, 1)
+DuckText/font_sizes/font_size = 14
+Messages/base_type = &"VBoxContainer"
+Messages/constants/separation = 5
+Note/base_type = &"Label"
+Note/colors/font_color = Color(0.45, 0.48, 0.55, 1)
+Note/font_sizes/font_size = 12
+PomodoroClock/base_type = &"Label"
+PomodoroClock/font_sizes/font_size = 44
+YourBubble/base_type = &"PanelContainer"
+YourBubble/styles/panel = SubResource("StyleBoxFlat_your_line")
+YourText/base_type = &"Label"
+YourText/colors/font_color = Color(1, 1, 1, 1)
+YourText/font_sizes/font_size = 14
 Label/colors/font_color = Color(0.12, 0.14, 0.2, 1)
 LineEdit/colors/font_color = Color(0.12, 0.14, 0.2, 1)
 LineEdit/colors/font_placeholder_color = Color(0.45, 0.4, 0.3, 1)
@@ -349,295 +337,20 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 9
 theme_override_constants/margin_bottom = 10
 
-[node name="Tabs" type="TabContainer" parent="Bubble/Panel/Margin"]
-layout_mode = 2
-current_tab = 0
-
-[node name="Chat" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
-layout_mode = 2
-metadata/_tab_index = 0
-
-[node name="Text" type="RichTextLabel" parent="Bubble/Panel/Margin/Tabs/Chat"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="Entry" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Chat"]
+[node name="Tabs" parent="Bubble/Panel/Margin" instance=ExtResource("tabs")]
 layout_mode = 2
 
-[node name="Status" type="PanelContainer" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
-visible = false
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_status")
-
-[node name="Row" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Chat/Entry/Status"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Bubble/Panel/Margin/Tabs/Chat/Entry/Status/Row"]
-layout_mode = 2
-size_flags_horizontal = 3
-clip_text = true
-text_overrun_behavior = 3
-theme_override_colors/font_color = Color(0.6, 0.05, 0.05, 1)
-text = "Listening: talk, then pause"
-
-[node name="Level" type="ProgressBar" parent="Bubble/Panel/Margin/Tabs/Chat/Entry/Status/Row"]
-custom_minimum_size = Vector2(36, 10)
-layout_mode = 2
-size_flags_vertical = 4
-theme_override_styles/background = SubResource("StyleBoxFlat_level_bg")
-theme_override_styles/fill = SubResource("StyleBoxFlat_level_fill")
-min_value = -60.0
-max_value = -10.0
-value = -60.0
-show_percentage = false
-
-[node name="Input" type="LineEdit" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "Talk to me, then Enter"
-
-[node name="Mic" type="Button" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
-custom_minimum_size = Vector2(34, 0)
-layout_mode = 2
-tooltip_text = "Talk to the duck. It sends when you pause, and listens again after it answers. Click again to stop."
-toggle_mode = true
-icon = ExtResource("11")
-icon_alignment = 1
-expand_icon = true
-
-[node name="Dot" type="Panel" parent="Bubble/Panel/Margin/Tabs/Chat/Entry/Mic"]
-visible = false
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -12.0
-offset_top = 2.0
-offset_right = -2.0
-offset_bottom = 12.0
-grow_horizontal = 0
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_dot")
-
-[node name="Send" type="Button" parent="Bubble/Panel/Margin/Tabs/Chat/Entry"]
-layout_mode = 2
-disabled = true
-text = "Send"
-
-[node name="Pomodoro" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
-visible = false
-layout_mode = 2
-script = ExtResource("18")
-metadata/_tab_index = 1
-
-[node name="Phase" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
-layout_mode = 2
-text = "Not running"
-horizontal_alignment = 1
-
-[node name="Time" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_colors/font_color = Color(0.72, 0.12, 0.06, 1)
-theme_override_font_sizes/font_size = 44
-text = "25:00"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="Bar" type="ProgressBar" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
-custom_minimum_size = Vector2(0, 8)
-layout_mode = 2
-theme_override_styles/background = SubResource("StyleBoxFlat_pomodoro_bg")
-theme_override_styles/fill = SubResource("StyleBoxFlat_pomodoro_fill")
-max_value = 1.0
-show_percentage = false
-
-[node name="Buttons" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
-layout_mode = 2
-
-[node name="Start" type="Button" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Start the timer, or pause and resume it. Or just ask the duck: \"start a pomodoro\"."
-text = "Start"
-
-[node name="Skip" type="Button" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "End this focus or break now and go on to the next."
-disabled = true
-text = "Skip"
-
-[node name="Stop" type="Button" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Stop the timer; the duck stops being a tomato."
-disabled = true
-text = "Stop"
-
-[node name="Lengths" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
-layout_mode = 2
+[node name="Lengths" parent="Bubble/Panel/Margin/Tabs/Pomodoro" index="4"]
 theme = SubResource("Theme_lengths")
 
-[node name="FocusLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
-layout_mode = 2
-text = "Focus"
+[node name="Mute" parent="Bubble/Panel/Margin/Tabs/Settings" index="5"]
+visible = false
 
-[node name="Focus" type="SpinBox" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Minutes of focus in each round."
-min_value = 1.0
-max_value = 180.0
-value = 25.0
+[node name="Pomodoro" type="Node" parent="."]
+script = ExtResource("18")
 
-[node name="ShortLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
-layout_mode = 2
-text = "Break"
-
-[node name="Short" type="SpinBox" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Minutes of the short break after each round."
-min_value = 1.0
-max_value = 60.0
-value = 5.0
-
-[node name="LongLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
-layout_mode = 2
-text = "Long"
-
-[node name="Long" type="SpinBox" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Minutes of the long break after every fourth round."
-min_value = 1.0
-max_value = 90.0
-value = 15.0
-
-[node name="PhaseTimer" type="Timer" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
+[node name="PhaseTimer" type="Timer" parent="Pomodoro"]
 one_shot = true
-
-[node name="Tick" type="Timer" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
-
-[node name="Stats" type="RichTextLabel" parent="Bubble/Panel/Margin/Tabs"]
-visible = false
-layout_mode = 2
-selection_enabled = true
-metadata/_tab_index = 2
-
-[node name="Settings" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
-visible = false
-layout_mode = 2
-metadata/_tab_index = 3
-
-[node name="VoiceLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings"]
-layout_mode = 2
-text = "Voice"
-
-[node name="Voices" type="OptionButton" parent="Bubble/Panel/Margin/Tabs/Settings"]
-layout_mode = 2
-clip_text = true
-fit_to_longest_item = false
-
-[node name="Buttons" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Settings"]
-layout_mode = 2
-
-[node name="Test" type="Button" parent="Bubble/Panel/Margin/Tabs/Settings/Buttons"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Test"
-
-[node name="Apply" type="Button" parent="Bubble/Panel/Margin/Tabs/Settings/Buttons"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Apply"
-
-[node name="Current" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings"]
-layout_mode = 2
-clip_text = true
-text_overrun_behavior = 3
-
-[node name="MicRow" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Settings"]
-layout_mode = 2
-
-[node name="MicLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings/MicRow"]
-layout_mode = 2
-text = "Mic"
-
-[node name="Mics" type="OptionButton" parent="Bubble/Panel/Margin/Tabs/Settings/MicRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "The microphone the duck listens through. Default follows Windows' own default."
-clip_text = true
-fit_to_longest_item = false
-
-[node name="Phone" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings"]
-layout_mode = 2
-mouse_filter = 1
-theme_override_font_sizes/font_size = 12
-text = "Phone: off"
-clip_text = true
-text_overrun_behavior = 3
-
-[node name="Duck" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
-visible = false
-layout_mode = 2
-metadata/_tab_index = 4
-
-[node name="NameRow" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Duck"]
-layout_mode = 2
-
-[node name="NameLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Duck/NameRow"]
-layout_mode = 2
-text = "Name"
-
-[node name="Name" type="LineEdit" parent="Bubble/Panel/Margin/Tabs/Duck/NameRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "No name yet"
-
-[node name="SaveName" type="Button" parent="Bubble/Panel/Margin/Tabs/Duck/NameRow"]
-layout_mode = 2
-text = "Save"
-
-[node name="HatRow" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Duck"]
-layout_mode = 2
-
-[node name="HatLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Duck/HatRow"]
-layout_mode = 2
-text = "Hat"
-
-[node name="Hat" type="CheckBox" parent="Bubble/Panel/Margin/Tabs/Duck/HatRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "The captain's hat, here and on the phone."
-text = "Captain's hat"
-
-[node name="MemoriesLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Duck"]
-layout_mode = 2
-text = "What it remembers"
-
-[node name="Memories" type="ItemList" parent="Bubble/Panel/Margin/Tabs/Duck"]
-layout_mode = 2
-size_flags_vertical = 3
-max_text_lines = 2
-
-[node name="Buttons" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Duck"]
-layout_mode = 2
-
-[node name="Forget" type="Button" parent="Bubble/Panel/Margin/Tabs/Duck/Buttons"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Forget the selected memory."
-text = "Forget"
-
-[node name="Folder" type="Button" parent="Bubble/Panel/Margin/Tabs/Duck/Buttons"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Open the duck's folder: its personality, memories and skills, all plain text."
-text = "Open folder"
 
 [node name="Menu" type="PopupMenu" parent="."]
 item_count = 1
@@ -664,7 +377,6 @@ item_0/id = 0
 [connection signal="install_progress" from="Voice/Kokoro" to="." method="_on_kokoro_progress"]
 [connection signal="installed" from="Voice/Kokoro" to="." method="_on_kokoro_installed"]
 [connection signal="install_failed" from="Voice/Kokoro" to="." method="_on_kokoro_failed"]
-[connection signal="item_selected" from="Bubble/Panel/Margin/Tabs/Settings/Voices" to="." method="_on_voice_selected"]
 [connection signal="read_finished" from="ScreenReader" to="." method="_on_screen_reader_read_finished"]
 [connection signal="request_completed" from="Searcher/Request" to="Searcher" method="_on_request_completed"]
 [connection signal="searched" from="Searcher" to="." method="_on_searcher_searched"]
@@ -674,17 +386,10 @@ item_0/id = 0
 [connection signal="request_completed" from="Brain/FactRequest" to="Brain" method="_on_fact_request_completed"]
 [connection signal="facts_found" from="Brain" to="Mind" method="add_facts"]
 [connection signal="window_input" from="Bubble" to="." method="_on_bubble_window_input"]
-[connection signal="text_submitted" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Input" to="." method="_on_input_text_submitted"]
-[connection signal="text_changed" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Input" to="." method="_on_input_text_changed"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Send" to="." method="_on_send_pressed"]
-[connection signal="toggled" from="Bubble/Panel/Margin/Tabs/Chat/Entry/Mic" to="." method="_on_mic_toggled"]
 [connection signal="finished" from="Squeak" to="." method="_on_squeak_finished"]
 [connection signal="heard" from="Listener" to="." method="_on_listener_heard"]
 [connection signal="mode_changed" from="Listener" to="." method="_on_listener_mode_changed"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Settings/Buttons/Test" to="." method="_on_test_pressed"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Settings/Buttons/Apply" to="." method="_on_apply_pressed"]
 [connection signal="id_pressed" from="Menu" to="." method="_on_menu_id_pressed"]
-[connection signal="item_selected" from="Bubble/Panel/Margin/Tabs/Settings/MicRow/Mics" to="." method="_on_mic_selected"]
 [connection signal="timeout" from="Remote/BeaconClock" to="Remote" method="_on_beacon_clock_timeout"]
 [connection signal="sentence" from="Brain" to="Remote" method="_on_brain_sentence"]
 [connection signal="status_changed" from="Brain" to="Remote" method="_on_brain_status_changed"]
@@ -695,20 +400,31 @@ item_0/id = 0
 [connection signal="rendered" from="Voice/Kokoro" to="Remote" method="_on_kokoro_rendered"]
 [connection signal="heard_from_phone" from="Listener" to="Remote" method="_on_listener_heard_from_phone"]
 [connection signal="changed" from="Mind" to="." method="_on_mind_changed"]
-[connection signal="text_submitted" from="Bubble/Panel/Margin/Tabs/Duck/NameRow/Name" to="." method="_on_name_submitted"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/NameRow/SaveName" to="." method="_on_save_name_pressed"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/Buttons/Forget" to="." method="_on_forget_pressed"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/Buttons/Folder" to="." method="_on_folder_pressed"]
-[connection signal="toggled" from="Bubble/Panel/Margin/Tabs/Duck/HatRow/Hat" to="." method="_on_hat_toggled"]
 [connection signal="hat_changed" from="." to="Remote" method="_on_pet_hat_changed"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons/Start" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_start_pressed"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons/Skip" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_skip_pressed"]
-[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons/Stop" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_stop_pressed"]
-[connection signal="value_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths/Focus" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_length_changed"]
-[connection signal="value_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths/Short" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_length_changed"]
-[connection signal="value_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths/Long" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_length_changed"]
-[connection signal="timeout" from="Bubble/Panel/Margin/Tabs/Pomodoro/PhaseTimer" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_phase_timer_timeout"]
-[connection signal="timeout" from="Bubble/Panel/Margin/Tabs/Pomodoro/Tick" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_tick_timeout"]
-[connection signal="phase_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro" to="." method="_on_pomodoro_phase_changed"]
-[connection signal="time_up" from="Bubble/Panel/Margin/Tabs/Pomodoro" to="." method="_on_pomodoro_time_up"]
-[connection signal="phase_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro" to="Remote" method="_on_pomodoro_phase_changed"]
+[connection signal="line_sent" from="Bubble/Panel/Margin/Tabs" to="." method="_on_tabs_line_sent"]
+[connection signal="input_changed" from="Bubble/Panel/Margin/Tabs" to="." method="_on_input_text_changed"]
+[connection signal="mic_toggled" from="Bubble/Panel/Margin/Tabs" to="." method="_on_mic_toggled"]
+[connection signal="new_pressed" from="Bubble/Panel/Margin/Tabs" to="." method="_on_tabs_new_pressed"]
+[connection signal="past_pressed" from="Bubble/Panel/Margin/Tabs" to="." method="_on_tabs_past_pressed"]
+[connection signal="conversation_chosen" from="Bubble/Panel/Margin/Tabs" to="." method="_on_tabs_conversation_chosen"]
+[connection signal="pomodoro_pressed" from="Bubble/Panel/Margin/Tabs" to="Pomodoro" method="act"]
+[connection signal="lengths_changed" from="Bubble/Panel/Margin/Tabs" to="Pomodoro" method="set_lengths"]
+[connection signal="voice_selected" from="Bubble/Panel/Margin/Tabs" to="." method="_on_voice_selected"]
+[connection signal="voice_tested" from="Bubble/Panel/Margin/Tabs" to="." method="_on_test_pressed"]
+[connection signal="voice_applied" from="Bubble/Panel/Margin/Tabs" to="." method="_on_apply_pressed"]
+[connection signal="mic_chosen" from="Bubble/Panel/Margin/Tabs" to="." method="_on_mic_selected"]
+[connection signal="name_saved" from="Bubble/Panel/Margin/Tabs" to="." method="_on_name_saved"]
+[connection signal="hat_toggled" from="Bubble/Panel/Margin/Tabs" to="." method="_on_hat_toggled"]
+[connection signal="memory_forgotten" from="Bubble/Panel/Margin/Tabs" to="." method="_on_memory_forgotten"]
+[connection signal="folder_pressed" from="Bubble/Panel/Margin/Tabs" to="." method="_on_folder_pressed"]
+[connection signal="timeout" from="Pomodoro/PhaseTimer" to="Pomodoro" method="_on_phase_timer_timeout"]
+[connection signal="phase_changed" from="Pomodoro" to="." method="_on_pomodoro_phase_changed"]
+[connection signal="time_up" from="Pomodoro" to="." method="_on_pomodoro_time_up"]
+[connection signal="changed" from="Pomodoro" to="." method="_on_pomodoro_changed"]
+[connection signal="phase_changed" from="Pomodoro" to="Remote" method="_on_pomodoro_phase_changed"]
+[connection signal="changed" from="Pomodoro" to="Remote" method="_on_pomodoro_changed"]
+[connection signal="voices_changed" from="." to="Remote" method="_on_pet_voices_changed"]
+[connection signal="duck_shown" from="." to="Remote" method="_on_pet_duck_shown"]
+[connection signal="stats_changed" from="." to="Remote" method="_on_pet_stats_changed"]
+
+[editable path="Bubble/Panel/Margin/Tabs"]

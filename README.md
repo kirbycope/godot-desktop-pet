@@ -56,11 +56,12 @@ more; later loads take seconds.
 | Drag | dangles from the cursor; let go still moving and it keeps the mouse's speed, so it can be thrown: it spins, bounces off the screen's edges, gives one of five quick squeaks when thrown hard and on every hard hit, and slides to a stop on the bottom |
 | Right-click | opens the menu, with Quit |
 
-The bubble has five tabs:
+The bubble has five tabs, the same scene as the phone app's (`scenes/duck_tabs.tscn`), so the PC and
+the phone look and work alike:
 
 | Tab | Shows |
 | --- | --- |
-| Chat | the greeting or the latest answer, and the box to type in |
+| Chat | the conversation as message bubbles, yours on the right in blue and the duck's on the left, the duck's growing as its sentences arrive and showing what it is doing until then ("Looking at your screen..."); what it remembered, small and grey under the answer; New and Past (see [On your phone](#on-your-phone)); and the box to type in |
 | Pomodoro | the Pomodoro timer: the phase and round, the time left, Start (then Pause and Resume), Skip and Stop, and the focus, break and long-break lengths in minutes; see [Pomodoro timer](#pomodoro-timer) |
 | Stats | the brain's state (`Ready, thinking on the GPU.`), the NPU and GPU with their TOPS, the model, the voice, and how much the last look at the screen read (or why it failed) |
 | Settings | every text-to-speech voice the system offers. Test says a line in the selected one without changing anything; Apply makes it the duck's voice and saves it |
@@ -336,7 +337,8 @@ so turn the microphone off when you are talking to someone else.
 ## On your phone
 
 The Android app is a remote control for the duck on your PC: the duck on the top half of the
-phone, the chat on the bottom half. It is not a second duck. The brain, the duck's memory and its
+phone, and on the bottom half the same five tabs as the PC's bubble, Chat, Pomodoro, Stats, Settings
+and Duck, showing the PC duck's and changing it. It is not a second duck. The brain, the duck's memory and its
 screen reading all stay on the PC, so from the phone you talk to the same duck, with the same
 memories and the same conversation, and it still reads the PC's screen: with the phone in hand at
 the desk, "why does this crash?" reads your editor.
@@ -356,15 +358,20 @@ the desk, "why does this crash?" reads your editor.
 - **Voice in.** The mic button listens on the phone with the same pause rule as on the PC, and
   sends each sentence to the PC as a WAV to be written down by Parakeet there; the phone has no
   speech model of its own. Tapping it off mid-sentence sends what you have said so far.
-- **The chat** looks like a messaging app: your messages in blue bubbles on the right, the
-  duck's in grey on the left, each as wide as its text up to three quarters of the screen. The
-  duck's bubble grows as its sentences arrive.
-- **New** starts a new conversation: the duck keeps its memories and personality but no longer
-  has the last one in mind. **Past** lists the conversations, newest first, each by when it began
-  and the first thing you said; tap one to take it up again where it left off. They are the files
-  in `user://duck/conversations/` on the PC, so the PC duck switches with the phone.
-- **Mute** silences the duck on the phone and tells the PC, which then makes no audio for it at
-  all, so a muted answer is done as soon as its text is; the choice is remembered.
+- **The chat** looks like a messaging app, on the phone and in the PC's bubble alike: your
+  messages in blue bubbles on the right, the duck's in grey on the left, each as wide as its text up
+  to four fifths of the chat. The duck's bubble grows as its sentences arrive.
+- **New** (on the Chat tab, here and on the PC) starts a new conversation: the duck keeps its
+  memories and personality but no longer has the last one in mind. **Past** lists the conversations
+  in place of this one, newest first, each by when it began and the first thing you said; tap one to
+  take it up again where it left off. They are the files in `user://duck/conversations/` on the PC,
+  so the PC duck and the phone always show the same one.
+- **The other tabs** show the PC duck's: its Pomodoro timer, counting down on the phone and worked
+  from it; its Stats; its voices, with Test (said on the PC) and Apply, and the natural voices'
+  download; its name, hat and memories. Settings has two things of the phone's own: the
+  phone's microphone, and **Mute**, which silences the duck on the phone and tells the PC, which
+  then makes no audio for it at all, so a muted answer is done as soon as its text is; the choice is
+  remembered. Under them, the PC it is paired with.
 - **The bubble bath.** The duck floats in milky bath water (the pond water from weather-fx, made
   calm), bobbing gently, with suds piled round it where it sits and clumps of foam floating about
   (`scripts/suds.gd`: hundreds of small foam bubbles in one MultiMesh, placed once from a seed and
@@ -382,18 +389,26 @@ the desk, "why does this crash?" reads your editor.
   sides of the view and splashes down, as hard as it came, with bubbles and a quick squeak for a belly
   flop, then drifts back into its suds. A tap still squeezes it, and so does pushing it down into
   the water.
-- **The captain's hat** is optional: the Captain's hat box on the PC's Duck tab, under the name, or
-  the Hat button on the phone (or a double tap on its duck) puts it on or takes it off, on both ducks
-  at once; the choice is kept in
+- **The captain's hat** is optional: the Captain's hat box on the Duck tab, on the PC or the phone
+  (or a double tap on the phone's duck) puts it on or takes it off, on both ducks at once; the
+  choice is kept in
   `user://settings.cfg`. It is `scenes/hat.tscn`, the model with its four PBR textures as one
   material, sitting on the duck's head and turning with it.
 - **The tomato**: while the [Pomodoro timer](#pomodoro-timer) runs on the PC, the phone's duck is a
-  tomato as well. The Timer button in the header starts it and stops it, and stays down while it
-  runs, however it was started; asking for one from the phone works the same as at the PC.
+  tomato as well. Its Pomodoro tab starts, pauses, skips and stops it, and asking for one from the
+  phone works the same as at the PC.
 - **The duck** sleeps until the PC's brain is awake, thinks while it waits, talks while it speaks,
   and squeezes and squeaks on every tap.
 - **Away from home**, put the PC and the phone on [Tailscale](https://tailscale.com) and type the
   PC's Tailscale name into the address field; the beacon only reaches the local network.
+- **No PC at all.** Under the pairing card, **Pomodoro only** runs the duck on its own as a Pomodoro
+  timer: the timer runs on the phone (the same `Pomodoro` node as the PC's, its lengths in the
+  phone's own `user://settings.cfg`), the other tabs are off since they need a model, the duck is a
+  tomato while it runs, and time-up is a squeak, a hop and the news in the phone's own voice. The
+  screen stays on while it runs, and the timer counts by the clock rather than by frames, so when
+  Android puts the app to sleep in the background it catches up on waking (measured on a Galaxy
+  S24 Ultra: a one-minute focus left in the background for 80 s came back 20 s into its break).
+  **Find PC** in the header goes back to the pairing card. **Try local LLM** is next.
 
 Measured on the PC and an Android emulator on it (October 2026): the PC's echo of your line in a few
 milliseconds, the first sentence on the phone 1.3 s after sending, and the first sentence's audio
@@ -411,14 +426,20 @@ sentence's index as a little-endian uint32, then a WAV.
 | From | Frame | |
 | --- | --- | --- |
 | phone | `{"hello": code, "name": phone}` | first; a wrong code gets `{"bye": "wrong code"}` and the socket closes |
-| PC | `{"welcome": duck name, "ready", "status", "speaks", "recent"}` | `recent` is the last six messages, so the phone shows where the conversation was |
+| PC | `{"welcome": duck name, "ready", "status", "speaks", "recent", "hat", "tomato", "memories", "pomodoro_state", "stats", "voices"}` | everything the tabs show; `recent` is the conversation as the PC's Chat tab has it (its last 40 messages) |
 | phone | `{"say": line}`, or audio kind 1 | typed, or a spoken sentence for the PC to transcribe |
 | PC | `{"you": line}` | the turn began; after a recording, what was heard (`""` with `"error"` when nothing was) |
 | PC | `{"sentence": text, "index": n}`, then audio kind 2 for `n` | each sentence as it is written, then its Kokoro audio |
 | PC | `{"replied": text, "notes": ...}` | the whole answer and what the duck remembered |
 | PC | `{"status": text, "ready": bool}`, `{"busy": true}` | the brain waking; a turn already under way |
-| phone | `{"pomodoro": bool}` | the Timer button: starts or stops the Pomodoro timer |
-| PC | `{"tomato": bool}` | the Pomodoro timer started or stopped; `welcome` carries it too |
+| phone | `{"new": true}`, `{"list": true}`, `{"open": id}` | New, Past, and a past conversation picked; answered `{"conversations": [...], "current": id}` and `{"conversation": id, "messages": [...]}` |
+| phone | `{"pomodoro": action}`, `{"lengths": [focus, short, long]}` | the Pomodoro tab: start, pause, resume, skip or stop, and its lengths |
+| PC | `{"pomodoro_state": {...}}`, `{"tomato": bool}` | the timer's phase, time left and lengths as they change, which the phone counts down from; the duck a tomato while it runs |
+| phone | `{"voice": id}`, `{"test_voice": id}`, `{"download_voices": true}` | Apply, Test and the natural voices' download entry |
+| PC | `{"voices": items, "chosen", "note"}`, `{"voice_note": text}`, `{"stats": text}` | the Settings tab's voices, the download's progress, the Stats tab |
+| phone | `{"name": text}`, `{"forget": index}`, `{"hat": bool}` | the Duck tab |
+| PC | `{"duck_name": text, "memories": [...]}`, `{"hat": bool}` | the Duck tab as it changes |
+| phone | `{"mute": bool}` | the phone's Mute: no audio is made for it |
 | phone | `{"ping": t}` every 5 s | answered `{"pong": t}`; three missed and the phone reconnects |
 
 The phone app is `scenes/remote.tscn` with `scripts/remote_app.gd`, in this same project. Android
@@ -689,7 +710,9 @@ scenes/pet.tscn             the pet window: the duck's viewport, Brain, Voice, S
 scenes/duck.tscn            the 3D duck, its camera and lights, its optional hat, and its tomato colours and leaves
 scenes/hat.tscn             the captain's hat with its material
 scenes/tomato_leaves.tscn   the tomato's green sepals and stem, from Godot's own meshes
-scripts/pomodoro.gd         the Pomodoro tab: the timer, its rounds, and what a line asks of it
+scripts/pomodoro.gd         the Pomodoro timer: its rounds, its state for the tab, and what a line asks of it
+scenes/duck_tabs.tscn       the five tabs, the same scene in the PC's bubble and the phone app
+scripts/duck_tabs.gd        the tabs: the chat's bubbles and past conversations, the timer's clock, the voice list
 assets/hat/                 the captain's hat model and textures
 scripts/pet.gd              edge walking, dragging, the bubble, greetings, stats and voice settings
 scripts/duck.gd             the duck's poses and animations
@@ -705,7 +728,7 @@ resources/model_preferences.tres  the lists themselves, edited in the inspector
 scripts/screen_reader.gd    captures the screen and reads it with the system OCR
 scripts/searcher.gd         looks things up on DuckDuckGo when asked to
 scripts/remote.gd           lets the phone app talk to the duck: the WebSocket server and the beacon
-scenes/remote.tscn          the phone app: the duck on top, the chat below
+scenes/remote.tscn          the phone app: the duck on top, the same tabs below, in the phone's sizes
 scripts/remote_app.gd       the phone app's pairing, chat, voice and the duck's moods
 scripts/suds.gd             the bubble bath's foam, round the duck and floating about
 assets/water/               the phone's bath: the water, the bubbles and the suds shaders

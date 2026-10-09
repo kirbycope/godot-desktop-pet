@@ -1,9 +1,8 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/remote_app.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/duck.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/listener.gd" id="3"]
-[ext_resource type="Texture2D" path="res://assets/icons/microphone.svg" id="4"]
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_01.ogg" id="5"]
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_02.ogg" id="6"]
 [ext_resource type="AudioStream" path="res://assets/audio/duck_squeak_03.ogg" id="7"]
@@ -17,6 +16,8 @@
 [ext_resource type="Shader" path="res://assets/water/bubbles.gdshader" id="10"]
 [ext_resource type="Shader" path="res://assets/water/suds.gdshader" id="11"]
 [ext_resource type="Script" path="res://scripts/suds.gd" id="12"]
+[ext_resource type="PackedScene" path="res://scenes/duck_tabs.tscn" id="tabs"]
+[ext_resource type="Script" path="res://scripts/pomodoro.gd" id="pomodoro"]
 
 [sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_fast"]
 streams_count = 5
@@ -140,15 +141,8 @@ corner_radius_bottom_left = 12
 content_margin_left = 14.0
 content_margin_right = 14.0
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dot"]
-bg_color = Color(0.9, 0.12, 0.12, 1)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pairing"]
-bg_color = Color(1, 1, 1, 0.98)
+bg_color = Color(1, 1, 1, 1)
 corner_radius_top_left = 24
 corner_radius_top_right = 24
 corner_radius_bottom_right = 24
@@ -192,8 +186,135 @@ content_margin_top = 14.0
 content_margin_right = 22.0
 content_margin_bottom = 14.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button"]
+bg_color = Color(0.38, 0.41, 0.47, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 22.0
+content_margin_top = 12.0
+content_margin_right = 22.0
+content_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_hover"]
+bg_color = Color(0.45, 0.48, 0.55, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 22.0
+content_margin_top = 12.0
+content_margin_right = 22.0
+content_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_pressed"]
+bg_color = Color(0.16, 0.48, 0.96, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 22.0
+content_margin_top = 12.0
+content_margin_right = 22.0
+content_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_disabled"]
+bg_color = Color(0.85, 0.86, 0.88, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 22.0
+content_margin_top = 12.0
+content_margin_right = 22.0
+content_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab"]
+bg_color = Color(0.88, 0.9, 0.93, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 20.0
+content_margin_top = 10.0
+content_margin_right = 20.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_selected"]
+bg_color = Color(0.16, 0.48, 0.96, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 20.0
+content_margin_top = 10.0
+content_margin_right = 20.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_plain"]
+content_margin_left = 4.0
+content_margin_top = 8.0
+content_margin_right = 4.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_tabs_panel"]
+content_margin_top = 16.0
+
 [sub_resource type="Theme" id="Theme_phone"]
 default_font_size = 26
+Button/colors/font_color = Color(1, 1, 1, 1)
+Button/colors/font_disabled_color = Color(0.55, 0.57, 0.62, 1)
+Button/colors/font_focus_color = Color(1, 1, 1, 1)
+Button/colors/font_hover_color = Color(1, 1, 1, 1)
+Button/colors/font_hover_pressed_color = Color(1, 1, 1, 1)
+Button/colors/font_pressed_color = Color(1, 1, 1, 1)
+Button/styles/disabled = SubResource("StyleBoxFlat_button_disabled")
+Button/styles/focus = SubResource("StyleBoxEmpty_plain")
+Button/styles/hover = SubResource("StyleBoxFlat_button_hover")
+Button/styles/hover_pressed = SubResource("StyleBoxFlat_button_pressed")
+Button/styles/normal = SubResource("StyleBoxFlat_button")
+Button/styles/pressed = SubResource("StyleBoxFlat_button_pressed")
+CheckBox/styles/disabled = SubResource("StyleBoxEmpty_plain")
+CheckBox/styles/focus = SubResource("StyleBoxEmpty_plain")
+CheckBox/styles/hover = SubResource("StyleBoxEmpty_plain")
+CheckBox/styles/hover_pressed = SubResource("StyleBoxEmpty_plain")
+CheckBox/styles/normal = SubResource("StyleBoxEmpty_plain")
+CheckBox/styles/pressed = SubResource("StyleBoxEmpty_plain")
+HBoxContainer/constants/separation = 10
+TabContainer/colors/font_hovered_color = Color(0.13, 0.15, 0.2, 1)
+TabContainer/colors/font_selected_color = Color(1, 1, 1, 1)
+TabContainer/colors/font_unselected_color = Color(0.3, 0.33, 0.4, 1)
+TabContainer/constants/side_margin = 0
+TabContainer/styles/panel = SubResource("StyleBoxEmpty_tabs_panel")
+TabContainer/colors/font_disabled_color = Color(0.72, 0.74, 0.78, 1)
+TabContainer/styles/tab_disabled = SubResource("StyleBoxFlat_tab")
+TabContainer/styles/tab_hovered = SubResource("StyleBoxFlat_tab")
+TabContainer/styles/tab_selected = SubResource("StyleBoxFlat_tab_selected")
+TabContainer/styles/tab_unselected = SubResource("StyleBoxFlat_tab")
+VBoxContainer/constants/separation = 12
+CheckBox/colors/font_color = Color(0.13, 0.15, 0.2, 1)
+CheckBox/colors/font_focus_color = Color(0.13, 0.15, 0.2, 1)
+CheckBox/colors/font_hover_color = Color(0.13, 0.15, 0.2, 1)
+CheckBox/colors/font_hover_pressed_color = Color(0.13, 0.15, 0.2, 1)
+CheckBox/colors/font_pressed_color = Color(0.13, 0.15, 0.2, 1)
+DuckBubble/base_type = &"PanelContainer"
+DuckBubble/styles/panel = SubResource("StyleBoxFlat_ducks")
+DuckText/base_type = &"Label"
+DuckText/colors/font_color = Color(0.12, 0.13, 0.17, 1)
+LineEdit/styles/focus = SubResource("StyleBoxFlat_input")
+Messages/base_type = &"VBoxContainer"
+Messages/constants/separation = 10
+Note/base_type = &"Label"
+Note/colors/font_color = Color(0.45, 0.48, 0.55, 1)
+Note/font_sizes/font_size = 20
+PomodoroClock/base_type = &"Label"
+PomodoroClock/font_sizes/font_size = 120
+TabContainer/font_sizes/font_size = 24
+YourBubble/base_type = &"PanelContainer"
+YourBubble/styles/panel = SubResource("StyleBoxFlat_yours")
+YourText/base_type = &"Label"
+YourText/colors/font_color = Color(1, 1, 1, 1)
 Label/colors/font_color = Color(0.13, 0.15, 0.2, 1)
 RichTextLabel/colors/default_color = Color(0.13, 0.15, 0.2, 1)
 LineEdit/colors/font_color = Color(0.13, 0.15, 0.2, 1)
@@ -211,8 +332,6 @@ grow_horizontal = 2
 grow_vertical = 2
 theme = SubResource("Theme_phone")
 script = ExtResource("1")
-your_bubble = SubResource("StyleBoxFlat_yours")
-duck_bubble = SubResource("StyleBoxFlat_ducks")
 
 [node name="Background" type="TextureRect" parent="."]
 layout_mode = 1
@@ -319,90 +438,21 @@ horizontal_alignment = 2
 clip_text = true
 text_overrun_behavior = 3
 
-[node name="New" type="Button" parent="Layout/Chat/Margin/Column/Header"]
-custom_minimum_size = Vector2(0, 56)
+[node name="FindPc" type="Button" parent="Layout/Chat/Margin/Column/Header"]
+visible = false
 layout_mode = 2
-tooltip_text = "Start a new conversation; this one is kept under Past"
-disabled = true
-text = "New"
+tooltip_text = "Look for your PC again, to talk to the duck there."
+text = "Find PC"
 
-[node name="Mute" type="Button" parent="Layout/Chat/Margin/Column/Header"]
-custom_minimum_size = Vector2(0, 56)
-layout_mode = 2
-tooltip_text = "Mute the duck: the PC then skips making its voice, so answers come sooner"
-toggle_mode = true
-text = "Mute"
-
-[node name="Hat" type="Button" parent="Layout/Chat/Margin/Column/Header"]
-custom_minimum_size = Vector2(0, 56)
-layout_mode = 2
-tooltip_text = "The captain's hat, here and on the PC"
-toggle_mode = true
-text = "Hat"
-
-[node name="Timer" type="Button" parent="Layout/Chat/Margin/Column/Header"]
-custom_minimum_size = Vector2(0, 56)
-layout_mode = 2
-tooltip_text = "Start or stop the Pomodoro timer on the PC; the duck is a tomato while it runs"
-toggle_mode = true
-text = "Timer"
-
-[node name="Past" type="Button" parent="Layout/Chat/Margin/Column/Header"]
-custom_minimum_size = Vector2(0, 56)
-layout_mode = 2
-tooltip_text = "Past conversations"
-disabled = true
-text = "Past"
-
-[node name="Conversation" type="ScrollContainer" parent="Layout/Chat/Margin/Column"]
+[node name="Tabs" parent="Layout/Chat/Margin/Column" instance=ExtResource("tabs")]
 layout_mode = 2
 size_flags_vertical = 3
-horizontal_scroll_mode = 0
 
-[node name="Messages" type="VBoxContainer" parent="Layout/Chat/Margin/Column/Conversation"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 10
-
-[node name="Entry" type="HBoxContainer" parent="Layout/Chat/Margin/Column"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Input" type="LineEdit" parent="Layout/Chat/Margin/Column/Entry"]
-custom_minimum_size = Vector2(0, 72)
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "Talk to me"
-editable = false
-
-[node name="Mic" type="Button" parent="Layout/Chat/Margin/Column/Entry"]
-custom_minimum_size = Vector2(72, 72)
-layout_mode = 2
-tooltip_text = "Talk to the duck"
-disabled = true
-toggle_mode = true
-icon = ExtResource("4")
-icon_alignment = 1
-expand_icon = true
-
-[node name="Dot" type="Panel" parent="Layout/Chat/Margin/Column/Entry/Mic"]
+[node name="Folder" parent="Layout/Chat/Margin/Column/Tabs/Duck/Buttons" index="1"]
 visible = false
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -20.0
-offset_top = 4.0
-offset_right = -4.0
-offset_bottom = 20.0
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_dot")
 
-[node name="Send" type="Button" parent="Layout/Chat/Margin/Column/Entry"]
-custom_minimum_size = Vector2(120, 72)
-layout_mode = 2
-disabled = true
-text = "Send"
+[node name="Mic" parent="Layout/Chat/Margin/Column/Tabs/Chat/Entry" index="2"]
+custom_minimum_size = Vector2(96, 0)
 
 [node name="Pairing" type="PanelContainer" parent="."]
 layout_mode = 1
@@ -412,9 +462,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -320.0
-offset_top = -360.0
+offset_top = -470.0
 offset_right = 320.0
-offset_bottom = 360.0
+offset_bottom = 470.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_pairing")
@@ -465,47 +515,32 @@ layout_mode = 2
 size_flags_vertical = 3
 autowrap_mode = 3
 
-[node name="History" type="PanelContainer" parent="."]
-visible = false
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -320.0
-offset_top = -460.0
-offset_right = 320.0
-offset_bottom = 460.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_pairing")
-
-[node name="Margin" type="MarginContainer" parent="History"]
+[node name="AloneLabel" type="Label" parent="Pairing/Margin/Column"]
 layout_mode = 2
-theme_override_constants/margin_left = 32
-theme_override_constants/margin_top = 32
-theme_override_constants/margin_right = 32
-theme_override_constants/margin_bottom = 32
+text = "No PC? The duck on its own:"
 
-[node name="Column" type="VBoxContainer" parent="History/Margin"]
+[node name="Alone" type="HBoxContainer" parent="Pairing/Margin/Column"]
 layout_mode = 2
-theme_override_constants/separation = 16
 
-[node name="Heading" type="Label" parent="History/Margin/Column"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 34
-text = "Past conversations"
-
-[node name="List" type="ItemList" parent="History/Margin/Column"]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_font_sizes/font_size = 24
-
-[node name="Close" type="Button" parent="History/Margin/Column"]
+[node name="PomodoroOnly" type="Button" parent="Pairing/Margin/Column/Alone"]
 custom_minimum_size = Vector2(0, 72)
 layout_mode = 2
-text = "Close"
+size_flags_horizontal = 3
+tooltip_text = "Just the Pomodoro timer, kept on this phone. The chat needs a PC or a local LLM."
+text = "Pomodoro only"
+
+[node name="LocalLlm" type="Button" parent="Pairing/Margin/Column/Alone"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Chat with a model running on this phone, as big as it can hold, in the phone's own voice."
+text = "Try local LLM"
+
+[node name="Pomodoro" type="Node" parent="."]
+script = ExtResource("pomodoro")
+
+[node name="PhaseTimer" type="Timer" parent="Pomodoro"]
+one_shot = true
 
 [node name="Listener" type="Node" parent="."]
 script = ExtResource("3")
@@ -527,9 +562,6 @@ stream = SubResource("AudioStreamRandomizer_fast")
 wait_time = 5.0
 
 [connection signal="gui_input" from="Layout/DuckView" to="." method="_on_duck_view_gui_input"]
-[connection signal="text_submitted" from="Layout/Chat/Margin/Column/Entry/Input" to="." method="_on_input_text_submitted"]
-[connection signal="toggled" from="Layout/Chat/Margin/Column/Entry/Mic" to="." method="_on_mic_toggled"]
-[connection signal="pressed" from="Layout/Chat/Margin/Column/Entry/Send" to="." method="_on_send_pressed"]
 [connection signal="item_selected" from="Pairing/Margin/Column/Found" to="." method="_on_found_item_selected"]
 [connection signal="pressed" from="Pairing/Margin/Column/Connect" to="." method="_on_connect_pressed"]
 [connection signal="text_submitted" from="Pairing/Margin/Column/Code" to="." method="_on_code_submitted"]
@@ -537,10 +569,28 @@ wait_time = 5.0
 [connection signal="mode_changed" from="Listener" to="." method="_on_listener_mode_changed"]
 [connection signal="finished" from="Player" to="." method="_on_player_finished"]
 [connection signal="timeout" from="PingClock" to="." method="_on_ping_clock_timeout"]
-[connection signal="pressed" from="Layout/Chat/Margin/Column/Header/New" to="." method="_on_new_pressed"]
-[connection signal="toggled" from="Layout/Chat/Margin/Column/Header/Mute" to="." method="_on_mute_toggled"]
-[connection signal="toggled" from="Layout/Chat/Margin/Column/Header/Hat" to="." method="_on_hat_toggled"]
-[connection signal="toggled" from="Layout/Chat/Margin/Column/Header/Timer" to="." method="_on_timer_toggled"]
-[connection signal="pressed" from="Layout/Chat/Margin/Column/Header/Past" to="." method="_on_past_pressed"]
-[connection signal="item_selected" from="History/Margin/Column/List" to="." method="_on_history_item_selected"]
-[connection signal="pressed" from="History/Margin/Column/Close" to="." method="_on_history_close_pressed"]
+[connection signal="line_sent" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_tabs_line_sent"]
+[connection signal="mic_toggled" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_mic_toggled"]
+[connection signal="new_pressed" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_new_pressed"]
+[connection signal="past_pressed" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_past_pressed"]
+[connection signal="conversation_chosen" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_conversation_chosen"]
+[connection signal="pomodoro_pressed" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_pomodoro_pressed"]
+[connection signal="lengths_changed" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_lengths_changed"]
+[connection signal="voice_selected" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_selected"]
+[connection signal="voice_tested" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_tested"]
+[connection signal="voice_applied" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_applied"]
+[connection signal="mic_chosen" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_mic_chosen"]
+[connection signal="mute_toggled" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_mute_toggled"]
+[connection signal="name_saved" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_name_saved"]
+[connection signal="hat_toggled" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_hat_toggled"]
+[connection signal="memory_forgotten" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_memory_forgotten"]
+
+[connection signal="pressed" from="Pairing/Margin/Column/Alone/PomodoroOnly" to="." method="_on_pomodoro_only_pressed"]
+[connection signal="pressed" from="Pairing/Margin/Column/Alone/LocalLlm" to="." method="_on_local_llm_pressed"]
+[connection signal="pressed" from="Layout/Chat/Margin/Column/Header/FindPc" to="." method="_on_find_pc_pressed"]
+[connection signal="timeout" from="Pomodoro/PhaseTimer" to="Pomodoro" method="_on_phase_timer_timeout"]
+[connection signal="phase_changed" from="Pomodoro" to="." method="_on_local_pomodoro_phase_changed"]
+[connection signal="time_up" from="Pomodoro" to="." method="_on_local_pomodoro_time_up"]
+[connection signal="changed" from="Pomodoro" to="." method="_on_local_pomodoro_changed"]
+
+[editable path="Layout/Chat/Margin/Column/Tabs"]

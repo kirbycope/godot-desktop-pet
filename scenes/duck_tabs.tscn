@@ -1,0 +1,400 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/duck_tabs.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/icons/microphone.svg" id="2"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_status"]
+bg_color = Color(1, 0.9, 0.9, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.15, 0.15, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 8.0
+content_margin_top = 3.0
+content_margin_right = 8.0
+content_margin_bottom = 3.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dot"]
+bg_color = Color(0.92, 0.1, 0.1, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_level_bg"]
+bg_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_level_fill"]
+bg_color = Color(0.85, 0.15, 0.15, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pomodoro_bg"]
+bg_color = Color(0.9, 0.9, 0.9, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pomodoro_fill"]
+bg_color = Color(0.82, 0.14, 0.07, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="Tabs" type="TabContainer"]
+current_tab = 0
+script = ExtResource("1")
+
+[node name="Chat" type="VBoxContainer" parent="."]
+layout_mode = 2
+metadata/_tab_index = 0
+
+[node name="Top" type="HBoxContainer" parent="Chat"]
+layout_mode = 2
+
+[node name="New" type="Button" parent="Chat/Top"]
+layout_mode = 2
+tooltip_text = "Start a new conversation; this one is kept under Past."
+text = "New"
+
+[node name="Past" type="Button" parent="Chat/Top"]
+layout_mode = 2
+tooltip_text = "Past conversations: pick one to take it up again."
+toggle_mode = true
+text = "Past"
+
+[node name="Conversation" type="ScrollContainer" parent="Chat"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Messages" type="VBoxContainer" parent="Chat/Conversation"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"Messages"
+
+[node name="PastList" type="ItemList" parent="Chat"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Entry" type="HBoxContainer" parent="Chat"]
+layout_mode = 2
+
+[node name="Status" type="PanelContainer" parent="Chat/Entry"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_status")
+
+[node name="Row" type="HBoxContainer" parent="Chat/Entry/Status"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Chat/Entry/Status/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+text_overrun_behavior = 3
+theme_override_colors/font_color = Color(0.6, 0.05, 0.05, 1)
+text = "Listening: talk, then pause"
+
+[node name="Level" type="ProgressBar" parent="Chat/Entry/Status/Row"]
+custom_minimum_size = Vector2(36, 10)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_styles/background = SubResource("StyleBoxFlat_level_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_level_fill")
+min_value = -60.0
+max_value = -10.0
+value = -60.0
+show_percentage = false
+
+[node name="Input" type="LineEdit" parent="Chat/Entry"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Talk to me, then Enter"
+
+[node name="Mic" type="Button" parent="Chat/Entry"]
+custom_minimum_size = Vector2(34, 0)
+layout_mode = 2
+tooltip_text = "Talk to the duck. It sends when you pause, and listens again after it answers. Click again to stop."
+toggle_mode = true
+icon = ExtResource("2")
+icon_alignment = 1
+expand_icon = true
+
+[node name="Dot" type="Panel" parent="Chat/Entry/Mic"]
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -12.0
+offset_top = 2.0
+offset_right = -2.0
+offset_bottom = 12.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_dot")
+
+[node name="Send" type="Button" parent="Chat/Entry"]
+layout_mode = 2
+disabled = true
+text = "Send"
+
+[node name="Pomodoro" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 1
+
+[node name="Phase" type="Label" parent="Pomodoro"]
+layout_mode = 2
+text = "Not running"
+horizontal_alignment = 1
+
+[node name="Time" type="Label" parent="Pomodoro"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"PomodoroClock"
+theme_override_colors/font_color = Color(0.72, 0.12, 0.06, 1)
+text = "25:00"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Bar" type="ProgressBar" parent="Pomodoro"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_pomodoro_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_pomodoro_fill")
+max_value = 1.0
+show_percentage = false
+
+[node name="Buttons" type="HBoxContainer" parent="Pomodoro"]
+layout_mode = 2
+
+[node name="Start" type="Button" parent="Pomodoro/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Start the timer, or pause and resume it. Or just ask the duck: \"start a pomodoro\"."
+text = "Start"
+
+[node name="Skip" type="Button" parent="Pomodoro/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "End this focus or break now and go on to the next."
+disabled = true
+text = "Skip"
+
+[node name="Stop" type="Button" parent="Pomodoro/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Stop the timer; the duck stops being a tomato."
+disabled = true
+text = "Stop"
+
+[node name="Lengths" type="HBoxContainer" parent="Pomodoro"]
+layout_mode = 2
+
+[node name="FocusLabel" type="Label" parent="Pomodoro/Lengths"]
+layout_mode = 2
+text = "Focus"
+
+[node name="Focus" type="SpinBox" parent="Pomodoro/Lengths"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Minutes of focus in each round."
+min_value = 1.0
+max_value = 180.0
+value = 25.0
+
+[node name="ShortLabel" type="Label" parent="Pomodoro/Lengths"]
+layout_mode = 2
+text = "Break"
+
+[node name="Short" type="SpinBox" parent="Pomodoro/Lengths"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Minutes of the short break after each round."
+min_value = 1.0
+max_value = 60.0
+value = 5.0
+
+[node name="LongLabel" type="Label" parent="Pomodoro/Lengths"]
+layout_mode = 2
+text = "Long"
+
+[node name="Long" type="SpinBox" parent="Pomodoro/Lengths"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Minutes of the long break after every fourth round."
+min_value = 1.0
+max_value = 90.0
+value = 15.0
+
+[node name="Tick" type="Timer" parent="Pomodoro"]
+
+[node name="Stats" type="RichTextLabel" parent="."]
+visible = false
+layout_mode = 2
+selection_enabled = true
+metadata/_tab_index = 2
+
+[node name="Settings" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 3
+
+[node name="VoiceLabel" type="Label" parent="Settings"]
+layout_mode = 2
+text = "Voice"
+
+[node name="Voices" type="OptionButton" parent="Settings"]
+layout_mode = 2
+clip_text = true
+fit_to_longest_item = false
+
+[node name="Buttons" type="HBoxContainer" parent="Settings"]
+layout_mode = 2
+
+[node name="Test" type="Button" parent="Settings/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Test"
+
+[node name="Apply" type="Button" parent="Settings/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Apply"
+
+[node name="Current" type="Label" parent="Settings"]
+layout_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="MicRow" type="HBoxContainer" parent="Settings"]
+layout_mode = 2
+
+[node name="MicLabel" type="Label" parent="Settings/MicRow"]
+layout_mode = 2
+text = "Mic"
+
+[node name="Mics" type="OptionButton" parent="Settings/MicRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "The microphone the duck listens through."
+clip_text = true
+fit_to_longest_item = false
+
+[node name="Mute" type="CheckBox" parent="Settings"]
+layout_mode = 2
+tooltip_text = "Say nothing here: answers are written only."
+text = "Mute"
+
+[node name="Phone" type="Label" parent="Settings"]
+layout_mode = 2
+mouse_filter = 1
+theme_type_variation = &"Note"
+text = "Phone: off"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Duck" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 4
+
+[node name="NameRow" type="HBoxContainer" parent="Duck"]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="Duck/NameRow"]
+layout_mode = 2
+text = "Name"
+
+[node name="Name" type="LineEdit" parent="Duck/NameRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "No name yet"
+
+[node name="SaveName" type="Button" parent="Duck/NameRow"]
+layout_mode = 2
+text = "Save"
+
+[node name="HatRow" type="HBoxContainer" parent="Duck"]
+layout_mode = 2
+
+[node name="HatLabel" type="Label" parent="Duck/HatRow"]
+layout_mode = 2
+text = "Hat"
+
+[node name="Hat" type="CheckBox" parent="Duck/HatRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "The captain's hat, on the PC duck and the phone's."
+text = "Captain's hat"
+
+[node name="MemoriesLabel" type="Label" parent="Duck"]
+layout_mode = 2
+text = "What it remembers"
+
+[node name="Memories" type="ItemList" parent="Duck"]
+layout_mode = 2
+size_flags_vertical = 3
+max_text_lines = 2
+
+[node name="Buttons" type="HBoxContainer" parent="Duck"]
+layout_mode = 2
+
+[node name="Forget" type="Button" parent="Duck/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Forget the selected memory."
+text = "Forget"
+
+[node name="Folder" type="Button" parent="Duck/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Open the duck's folder: its personality, memories and skills, all plain text."
+text = "Open folder"
+
+[connection signal="pressed" from="Chat/Top/New" to="." method="_on_new_pressed"]
+[connection signal="toggled" from="Chat/Top/Past" to="." method="_on_past_toggled"]
+[connection signal="item_selected" from="Chat/PastList" to="." method="_on_past_list_item_selected"]
+[connection signal="text_submitted" from="Chat/Entry/Input" to="." method="_on_input_text_submitted"]
+[connection signal="text_changed" from="Chat/Entry/Input" to="." method="_on_input_text_changed"]
+[connection signal="toggled" from="Chat/Entry/Mic" to="." method="_on_mic_toggled"]
+[connection signal="pressed" from="Chat/Entry/Send" to="." method="_on_send_pressed"]
+[connection signal="pressed" from="Pomodoro/Buttons/Start" to="." method="_on_start_pressed"]
+[connection signal="pressed" from="Pomodoro/Buttons/Skip" to="." method="_on_skip_pressed"]
+[connection signal="pressed" from="Pomodoro/Buttons/Stop" to="." method="_on_stop_pressed"]
+[connection signal="value_changed" from="Pomodoro/Lengths/Focus" to="." method="_on_length_changed"]
+[connection signal="value_changed" from="Pomodoro/Lengths/Short" to="." method="_on_length_changed"]
+[connection signal="value_changed" from="Pomodoro/Lengths/Long" to="." method="_on_length_changed"]
+[connection signal="timeout" from="Pomodoro/Tick" to="." method="_on_tick_timeout"]
+[connection signal="item_selected" from="Settings/Voices" to="." method="_on_voices_item_selected"]
+[connection signal="pressed" from="Settings/Buttons/Test" to="." method="_on_test_pressed"]
+[connection signal="pressed" from="Settings/Buttons/Apply" to="." method="_on_apply_pressed"]
+[connection signal="item_selected" from="Settings/MicRow/Mics" to="." method="_on_mics_item_selected"]
+[connection signal="toggled" from="Settings/Mute" to="." method="_on_mute_toggled"]
+[connection signal="text_submitted" from="Duck/NameRow/Name" to="." method="_on_name_submitted"]
+[connection signal="pressed" from="Duck/NameRow/SaveName" to="." method="_on_save_name_pressed"]
+[connection signal="toggled" from="Duck/HatRow/Hat" to="." method="_on_hat_toggled"]
+[connection signal="pressed" from="Duck/Buttons/Forget" to="." method="_on_forget_pressed"]
+[connection signal="pressed" from="Duck/Buttons/Folder" to="." method="_on_folder_pressed"]

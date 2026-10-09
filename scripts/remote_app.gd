@@ -1,10 +1,15 @@
 class_name RemoteApp
 extends Control
 ## The duck on your phone: a remote control for the duck on your PC. The duck sits on the top half,
-## the chat on the bottom half. What you type or say goes to the PC, which answers as it would
-## there, screen reading and all; its sentences come back as text and, with a Kokoro voice chosen
-## on the PC, as audio. The phone finds the PC by its beacon (see remote.gd) or by an address typed
-## in, and pairs with the code shown on the PC's Settings tab.
+## and the bottom half has the same tabs as the PC's bubble (DuckTabs): Chat, Pomodoro, Stats,
+## Settings and Duck, showing the PC duck's and changing it. What you type or say goes to the PC,
+## which answers as it would there, screen reading and all; its sentences come back as text and,
+## with a Kokoro voice chosen on the PC, as audio. The phone finds the PC by its beacon (see
+## remote.gd) or by an address typed in, and pairs with the code shown on the PC's Settings tab.
+
+## Whose duck this is: the PC's (paired, or looking for it), the Pomodoro timer alone with no PC,
+## or a model running on the phone.
+enum Mode { PC, POMODORO, LOCAL }
 
 const SETTINGS_PATH: String = "user://remote.cfg"
 ## Missed pongs before the PC counts as lost.
@@ -12,18 +17,13 @@ const MAX_MISSED: int = 3
 
 @export var port: int = 39842
 @export var beacon_port: int = 39843
-## The bubbles: yours on the right, the duck's on the left, as in a messaging app.
-@export var your_bubble: StyleBox
-@export var duck_bubble: StyleBox
-## A jolt of the phone stronger than this, in m/s² beyond its steady pull, stirs the bath.
+## A jolt of the phone stronger than this, in m/sÂ² beyond its steady pull, stirs the bath.
 @export var shake_threshold: float = 2.5
 ## How long the bath takes to settle by half after a stir, in seconds.
 @export var settle_half_life: float = 0.8
 ## The swell when calm; a stir raises it up to `stir_swell` times.
 @export var calm_swell: float = 0.004
 @export var stir_swell: float = 6.0
-## A bubble is at most this share of the chat's width, and as narrow as its text otherwise.
-@export_range(0.3, 1.0) var bubble_share: float = 0.78
 ## Picked up, dropped and thrown, as on the PC: metres a second squared pulling it back to the water,
 ## the fastest it can be thrown in metres a second, how far from its middle a press still picks it
 ## up (metres), and how far a finger moves (pixels) before a press is a pick-up rather than a tap.
@@ -32,6 +32,7 @@ const MAX_MISSED: int = 3
 @export var grab_radius: float = 0.17
 @export var drag_slop: float = 12.0
 
+var mode: Mode = Mode.PC
 ## {address: {port, name}} of the PCs whose beacons were heard.
 var found: Dictionary = {}
 var _client: WebSocketPeer = null
@@ -51,9 +52,6 @@ var _next_audio: int = 1
 var _last_sentence: int = 0
 ## Counts answers, so a give-up timer from an earlier one does nothing.
 var _turn: int = 0
-## The duck's bubble for the answer coming in, and whether a sentence has reached it yet.
-var _answer: Label = null
-var _answer_started: bool = false
 ## Muted: nothing is said here, and the PC makes no audio for this phone.
 var _muted: bool = false
 ## How stirred the bath is, from 0 (calm) to 1, and the phone's steady pull, to tell a jolt from it.
@@ -85,19 +83,11 @@ var _utterance: int = 0
 @onready var duck_view: SubViewportContainer = $Layout/DuckView
 @onready var title: Label = $Layout/Chat/Margin/Column/Header/Title
 @onready var status: Label = $Layout/Chat/Margin/Column/Header/Status
-@onready var conversation: ScrollContainer = $Layout/Chat/Margin/Column/Conversation
-@onready var messages_box: VBoxContainer = $Layout/Chat/Margin/Column/Conversation/Messages
-@onready var input: LineEdit = $Layout/Chat/Margin/Column/Entry/Input
-@onready var mic_button: Button = $Layout/Chat/Margin/Column/Entry/Mic
-@onready var mic_dot: Control = $Layout/Chat/Margin/Column/Entry/Mic/Dot
-@onready var send_button: Button = $Layout/Chat/Margin/Column/Entry/Send
-@onready var new_button: Button = $Layout/Chat/Margin/Column/Header/New
-@onready var mute_button: Button = $Layout/Chat/Margin/Column/Header/Mute
-@onready var hat_button: Button = $Layout/Chat/Margin/Column/Header/Hat
-@onready var timer_button: Button = $Layout/Chat/Margin/Column/Header/Timer
-@onready var past_button: Button = $Layout/Chat/Margin/Column/Header/Past
-@onready var history: Control = $History
-@onready var history_list: ItemList = $History/Margin/Column/List
+## The same tabs as the PC's bubble (scenes/duck_tabs.tscn).
+@onready var tabs: DuckTabs = $Layout/Chat/Margin/Column/Tabs
+@onready var find_pc_button: Button = $Layout/Chat/Margin/Column/Header/FindPc
+## The phone's own timer, for when there is no PC.
+@onready var local_pomodoro: Pomodoro = $Pomodoro
 @onready var pairing: Control = $Pairing
 @onready var found_list: ItemList = $Pairing/Margin/Column/Found
 @onready var address: LineEdit = $Pairing/Margin/Column/Address
@@ -127,8 +117,14 @@ func _ready() -> void:
 	address.text = _host
 	code_input.text = _code
 	_muted = bool(config.get_value("sound", "muted", false))
-	mute_button.set_pressed_no_signal(_muted)
-	mute_button.text = "Unmute" if _muted else "Mute"
+	tabs.mute_box.set_pressed_no_signal(_muted)
+	tabs.mute_box.tooltip_text = "Say nothing on this phone: answers are written only, and the PC makes no audio for it."
+	var mic: String = Listener.load_device(Listener.SETTINGS_PATH)
+	tabs.show_mics(AudioServer.get_input_device_list(), mic if not mic.is_empty() else AudioServer.input_device)
+	tabs.mics.tooltip_text = "The microphone this phone listens through."
+	tabs.pairing_label.text = "Not paired with a PC yet."
+	# Nothing to say or ask until a PC answers.
+	_set_awake(false, "")
 	if DisplayServer.has_feature(DisplayServer.FEATURE_TEXT_TO_SPEECH):
 		DisplayServer.tts_set_utterance_callback(DisplayServer.TTS_UTTERANCE_ENDED, _on_utterance_ended)
 	if not _host.is_empty() and not _code.is_empty():
@@ -247,33 +243,39 @@ func _on_frame(frame: Dictionary) -> void:
 		ping_clock.start()
 		pairing.visible = false
 		_save()
-		_client.send_text(JSON.stringify({"mute": _muted}))
-		title.text = str(frame["welcome"]) if not str(frame["welcome"]).is_empty() else "Rubber Duck"
+		_tell_pc({"mute": _muted})
 		_speaks = frame.get("speaks", false)
-		_show_conversation(frame.get("recent", []))
+		tabs.show_conversation(frame.get("recent", []))
+		_show_duck(str(frame["welcome"]), frame.get("memories", []))
 		_show_hat(bool(frame.get("hat", false)))
-		_show_tomato(bool(frame.get("tomato", false)))
+		duck.tomato = bool(frame.get("tomato", false))
+		tabs.show_pomodoro(frame.get("pomodoro_state", {}))
+		tabs.stats.text = str(frame.get("stats", ""))
+		var voices: Dictionary = frame.get("voices", {})
+		tabs.show_voices(voices.get("items", []), str(voices.get("chosen", "")), str(voices.get("note", "")))
+		tabs.pairing_label.text = "Paired with the duck at %s." % _host
 		_set_awake(frame.get("ready", false), str(frame.get("status", "")))
 	elif frame.has("hat") and frame.size() == 1:
 		_show_hat(bool(frame["hat"]))
 	elif frame.has("tomato") and frame.size() == 1:
 		# A tomato while the Pomodoro timer runs on the PC.
-		_show_tomato(bool(frame["tomato"]))
+		duck.tomato = bool(frame["tomato"])
+	elif frame.has("pomodoro_state"):
+		tabs.show_pomodoro(frame["pomodoro_state"])
+	elif frame.has("stats"):
+		tabs.stats.text = str(frame["stats"])
+	elif frame.has("voices"):
+		tabs.show_voices(frame["voices"], str(frame.get("chosen", "")), str(frame.get("note", "")))
+	elif frame.has("voice_note"):
+		tabs.show_voice_note(str(frame["voice_note"]), true)
+	elif frame.has("duck_name"):
+		_show_duck(str(frame["duck_name"]), frame.get("memories", []))
 	elif frame.has("conversations"):
-		history_list.clear()
-		for found_one: Variant in frame["conversations"]:
-			if found_one is Dictionary:
-				history_list.add_item(history_line(found_one, str(frame.get("current", ""))))
-				history_list.set_item_metadata(history_list.item_count - 1, str(found_one.get("id", "")))
-		if history_list.item_count == 0:
-			history_list.add_item("Nothing yet: what you say starts the first one.")
-			history_list.set_item_disabled(0, true)
-		history.visible = true
+		tabs.show_past(frame["conversations"], str(frame.get("current", "")))
 	elif frame.has("conversation"):
-		history.visible = false
 		player.stop()
 		_audio.clear()
-		_show_conversation(frame.get("messages", []))
+		tabs.show_conversation(frame.get("messages", []))
 		_set_status("New conversation" if (frame.get("messages", []) as Array).is_empty() else "")
 	elif frame.has("bye"):
 		_paired = false
@@ -294,30 +296,22 @@ func _on_frame(frame: Dictionary) -> void:
 			_last_sentence = 0
 			player.stop()
 			listener.pause()
-			_add_message("user", str(frame["you"]))
 			# The duck's bubble now, "..." until its first sentence; the rest join it as they come.
-			_answer = _add_message("assistant", "...")
-			_answer_started = false
+			tabs.begin_answer(str(frame["you"]))
 			duck.play(&"think")
 			_set_status("Thinking...")
 	elif frame.has("sentence"):
 		_last_sentence = maxi(_last_sentence, int(frame.get("index", 0)))
-		if _answer != null:
-			_answer.text = str(frame["sentence"]) if not _answer_started else _answer.text + " " + str(frame["sentence"])
-			_answer_started = true
-			_fit(_answer)
-			_scroll_down()
+		tabs.add_sentence(str(frame["sentence"]))
 		if not _speaks and not _muted:
 			_utterance += 1
 			DisplayServer.tts_speak(str(frame["sentence"]), Voice.default_voice(DisplayServer.tts_get_voices(), OS.get_locale_language()), 70, 1.0, 1.0, _utterance, false)
 			duck.play(&"talk")
 	elif frame.has("replied"):
 		_waiting = false
-		if not str(frame.get("notes", "")).is_empty():
-			_add_note(str(frame["notes"]))
-		if _answer != null and not _answer_started:
-			_answer.text = str(frame["replied"])
-			_fit(_answer)
+		if not tabs.answer_started():
+			tabs.set_answer(str(frame["replied"]))
+		tabs.add_note(str(frame.get("notes", "")))
 		_set_status("")
 		# Audio for a sentence that never comes must not keep the mic shut for good.
 		get_tree().create_timer(20.0).timeout.connect(_give_up_on_audio.bind(_turn))
@@ -373,7 +367,7 @@ func _after_speaking() -> void:
 
 
 func _listen_again() -> void:
-	if mic_button.button_pressed:
+	if tabs.mic_button.button_pressed:
 		listener.resume()
 
 
@@ -384,152 +378,195 @@ func _set_awake(awake: bool, text: String) -> void:
 		duck.play(&"sleep")
 	_awake = awake
 	_set_status("" if awake else text)
-	input.editable = awake
-	send_button.disabled = not awake
-	mic_button.disabled = not awake
-	new_button.disabled = not awake
-	past_button.disabled = not awake
+	tabs.input.editable = awake
+	tabs.send_button.disabled = not awake
+	tabs.mic_button.disabled = not awake
+	tabs.new_button.disabled = not awake
+	tabs.past_button.disabled = not awake
 
 
 func _set_status(text: String) -> void:
 	status.text = text
 
 
-## A message in its bubble, on your side or the duck's; returns its label, for the answer to grow.
-func _add_message(role: String, text: String) -> Label:
-	var row: HBoxContainer = HBoxContainer.new()
-	var bubble: PanelContainer = PanelContainer.new()
-	var label: Label = Label.new()
-	var yours: bool = role == "user"
-	bubble.add_theme_stylebox_override("panel", your_bubble if yours else duck_bubble)
-	label.text = text
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_color_override("font_color", Color.WHITE if yours else Color(0.12, 0.13, 0.17))
-	bubble.add_child(label)
-	row.alignment = BoxContainer.ALIGNMENT_END if yours else BoxContainer.ALIGNMENT_BEGIN
-	row.add_child(bubble)
-	messages_box.add_child(row)
-	_fit(label)
-	_scroll_down()
-	return label
+## Sends `frame` to the PC; false when there is no PC to send it to.
+func _tell_pc(frame: Dictionary) -> bool:
+	if _client == null or not _paired:
+		return false
+	_client.send_text(JSON.stringify(frame))
+	return true
 
 
-## What the duck remembered on the way: small and grey, in the middle.
-func _add_note(text: String) -> void:
-	var label: Label = Label.new()
-	label.text = text
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 20)
-	label.add_theme_color_override("font_color", Color(0.45, 0.48, 0.55))
-	messages_box.add_child(label)
-	_scroll_down()
+## Typed and sent on the Chat tab.
+func _on_tabs_line_sent(line: String) -> void:
+	_tell_pc({"say": line})
 
 
-## A bubble as wide as its text, up to `bubble_share` of the chat.
-func _fit(label: Label) -> void:
-	var font: Font = label.get_theme_font("font")
-	var size: int = label.get_theme_font_size("font_size")
-	var widest: float = 0.0
-	for line: String in label.text.split("\n"):
-		widest = maxf(widest, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x)
-	var room: float = maxf(conversation.size.x, 300.0) * bubble_share - 44.0
-	label.custom_minimum_size.x = bubble_width(widest, room)
-
-
-func _scroll_down() -> void:
-	await get_tree().process_frame
-	if is_instance_valid(conversation):
-		conversation.scroll_vertical = int(conversation.get_v_scroll_bar().max_value)
-
-
-func _send(line: String) -> void:
-	if line.strip_edges().is_empty() or _client == null or not _paired:
-		return
-	_client.send_text(JSON.stringify({"say": line.strip_edges()}))
-	input.clear()
-
-
-func _show_conversation(messages: Array) -> void:
-	for child: Node in messages_box.get_children():
-		child.queue_free()
-	_answer = null
-	for message: Variant in messages:
-		if message is Dictionary:
-			_add_message(str(message.get("role", "")), str(message.get("content", "")))
+## The duck's name, as the title and on the Duck tab, and what it remembers.
+func _show_duck(duck_name: String, memories: Array) -> void:
+	title.text = duck_name if not duck_name.is_empty() else "Rubber Duck"
+	tabs.show_duck(duck_name, PackedStringArray(memories))
 
 
 ## Puts the captain's hat on or takes it off, here and on the PC duck.
 func _on_hat_toggled(on: bool) -> void:
 	duck.hat = on
-	if _client != null and _paired:
-		_client.send_text(JSON.stringify({"hat": on}))
+	_tell_pc({"hat": on})
 
 
 ## The hat as the PC has it, without sending it back.
 func _show_hat(on: bool) -> void:
 	duck.hat = on
-	hat_button.set_pressed_no_signal(on)
+	tabs.show_hat(on)
 
 
-## Starts or stops the Pomodoro timer on the PC. The duck here turns tomato, and the button stays
-## down, once the PC says the timer runs; with no PC to ask, the button comes back up.
-func _on_timer_toggled(on: bool) -> void:
-	if _client != null and _paired:
-		_client.send_text(JSON.stringify({"pomodoro": on}))
+## The Pomodoro tab's buttons and lengths work the PC's timer, whose state comes back to the tab;
+## with no PC, the phone's own.
+func _on_pomodoro_pressed(action: String) -> void:
+	if mode == Mode.PC:
+		_tell_pc({"pomodoro": action})
 	else:
-		timer_button.set_pressed_no_signal(false)
+		local_pomodoro.act(action)
 
 
-## The duck a tomato, and the Timer button down, while the PC's Pomodoro timer runs.
-func _show_tomato(on: bool) -> void:
-	duck.tomato = on
-	timer_button.set_pressed_no_signal(on)
+func _on_lengths_changed(minutes: Array[int]) -> void:
+	if mode == Mode.PC:
+		_tell_pc({"lengths": minutes})
+	else:
+		local_pomodoro.set_lengths(minutes)
+
+
+## The duck on its own, with just the Pomodoro timer.
+func _on_pomodoro_only_pressed() -> void:
+	_go_alone(Mode.POMODORO)
+
+
+func _on_local_llm_pressed() -> void:
+	pairing_note.text = "The local LLM is not here yet; Pomodoro only works without a PC."
+
+
+## Stops looking for the PC and runs the duck on the phone: in Pomodoro only, every tab but the
+## timer's is off, since the rest needs a model.
+func _go_alone(alone: Mode) -> void:
+	mode = alone
+	if _client != null:
+		_client.close()
+		_client = null
+	_paired = false
+	ping_clock.stop()
+	pairing.visible = false
+	find_pc_button.visible = true
+	title.text = "Pomodoro" if alone == Mode.POMODORO else "Ducky"
+	_set_status("No PC: just the timer" if alone == Mode.POMODORO else "")
+	for i: int in tabs.get_tab_count():
+		tabs.set_tab_disabled(i, alone == Mode.POMODORO and tabs.get_tab_control(i).name != &"Pomodoro")
+	tabs.current_tab = tabs.get_tab_idx_from_control(tabs.get_node("Pomodoro"))
+	tabs.show_pomodoro(local_pomodoro.state())
+	duck.tomato = local_pomodoro.is_running()
+	duck.play(&"wake")
+	_awake = true
+
+
+## Back to looking for the PC: the phone's own timer stops, as the PC keeps its own.
+func _on_find_pc_pressed() -> void:
+	mode = Mode.PC
+	if local_pomodoro.is_running():
+		local_pomodoro.stop()
+	find_pc_button.visible = false
+	for i: int in tabs.get_tab_count():
+		tabs.set_tab_disabled(i, false)
+	tabs.current_tab = 0
+	title.text = "Rubber Duck"
+	_set_awake(false, "")
+	if not _host.is_empty() and not _code.is_empty():
+		_connect()
+	_show_pairing("Looking for your PC...")
+
+
+func _on_local_pomodoro_changed() -> void:
+	if mode != Mode.PC:
+		tabs.show_pomodoro(local_pomodoro.state())
+
+
+## A tomato while the phone's timer runs, with the screen kept on so the phone does not sleep
+## through the end of a phase.
+func _on_local_pomodoro_phase_changed(phase: Pomodoro.Phase) -> void:
+	if mode == Mode.PC:
+		return
+	duck.tomato = phase != Pomodoro.Phase.OFF
+	DisplayServer.screen_set_keep_on(phase != Pomodoro.Phase.OFF)
+	if phase == Pomodoro.Phase.OFF and mode == Mode.POMODORO:
+		_set_status("No PC: just the timer")
+
+
+## Time is up on the phone's timer: a squeak, a hop, and the news in the phone's own voice.
+func _on_local_pomodoro_time_up(next: Pomodoro.Phase) -> void:
+	if mode == Mode.PC:
+		return
+	var text: String = Pomodoro.announcement(next, local_pomodoro.minutes_for(next), local_pomodoro.finished, local_pomodoro.rounds)
+	squeak.play()
+	duck.play(&"cheer", true)
+	get_tree().create_timer(Duck.HOP_SECONDS * 3.0).timeout.connect(_after_landing)
+	_set_status(text)
+	if not _muted and DisplayServer.has_feature(DisplayServer.FEATURE_TEXT_TO_SPEECH):
+		_utterance += 1
+		DisplayServer.tts_speak(text, Voice.default_voice(DisplayServer.tts_get_voices(), OS.get_locale_language()), 70, 1.0, 1.0, _utterance, true)
+
+
+## The download entry in the voice list starts the natural voices downloading on the PC.
+func _on_voice_selected(id: String) -> void:
+	if id == DuckTabs.DOWNLOAD_KOKORO:
+		_tell_pc({"download_voices": true})
+
+
+## Test says the line on the PC, the way the PC's own Test does.
+func _on_voice_tested(id: String) -> void:
+	_tell_pc({"test_voice": id})
+
+
+func _on_voice_applied(id: String) -> void:
+	_tell_pc({"voice": id})
+
+
+## The phone's own microphone.
+func _on_mic_chosen(device: String) -> void:
+	listener.use_device(device)
+
+
+func _on_name_saved(duck_name: String) -> void:
+	_tell_pc({"name": duck_name})
+
+
+func _on_memory_forgotten(index: int) -> void:
+	_tell_pc({"forget": index})
 
 
 func _on_mute_toggled(on: bool) -> void:
 	_muted = on
-	mute_button.text = "Unmute" if on else "Mute"
 	if on:
 		player.stop()
 		_audio.clear()
 		DisplayServer.tts_stop()
-	if _client != null and _paired:
-		_client.send_text(JSON.stringify({"mute": on}))
+	_tell_pc({"mute": on})
 	_save()
 	_after_speaking()
 
 
 func _on_new_pressed() -> void:
-	if _client != null and _paired:
-		_client.send_text(JSON.stringify({"new": true}))
+	_tell_pc({"new": true})
 
 
 func _on_past_pressed() -> void:
-	if _client != null and _paired:
-		_client.send_text(JSON.stringify({"list": true}))
+	if not _tell_pc({"list": true}):
+		tabs.show_past([], "")
 
 
-func _on_history_item_selected(index: int) -> void:
-	var id: String = str(history_list.get_item_metadata(index))
-	if not id.is_empty() and _client != null:
-		_client.send_text(JSON.stringify({"open": id}))
-
-
-func _on_history_close_pressed() -> void:
-	history.visible = false
-
-
-func _on_send_pressed() -> void:
-	_send(input.text)
-
-
-func _on_input_text_submitted(text: String) -> void:
-	_send(text)
+func _on_conversation_chosen(id: String) -> void:
+	_tell_pc({"open": id})
 
 
 func _on_mic_toggled(on: bool) -> void:
-	mic_dot.visible = on
+	tabs.mic_dot.visible = on
 	if on:
 		listener.start()
 		if listener.mode == Listener.Mode.OFF:
@@ -540,7 +577,7 @@ func _on_mic_toggled(on: bool) -> void:
 
 ## What the mic is doing, in the status line, so a mic that hears nothing is plain to see.
 func _on_listener_mode_changed(mode: Listener.Mode) -> void:
-	if not mic_button.button_pressed:
+	if not tabs.mic_button.button_pressed:
 		return
 	match mode:
 		Listener.Mode.WAITING:
@@ -584,7 +621,7 @@ func _on_duck_view_gui_input(event: InputEvent) -> void:
 	if press.pressed:
 		if press.double_click:
 			# A double tap swaps the captain's hat, on the PC duck too.
-			hat_button.button_pressed = not hat_button.button_pressed
+			tabs.hat_box.button_pressed = not tabs.hat_box.button_pressed
 			return
 		_pressed = true
 		_press_at = press.position
@@ -743,7 +780,7 @@ static func owes_audio(next_index: int, last: int) -> bool:
 	return next_index <= last
 
 
-## How hard a jolt of `jolt` m/s² stirs the bath: a shake just past the threshold a little, a hard
+## How hard a jolt of `jolt` m/sÂ² stirs the bath: a shake just past the threshold a little, a hard
 ## one fully.
 static func stir_for(jolt: float, threshold: float) -> float:
 	return clampf((jolt - threshold) / 6.0 + 0.3, 0.3, 1.0)
@@ -752,17 +789,6 @@ static func stir_for(jolt: float, threshold: float) -> float:
 ## The stir after `delta` seconds of settling, halving every `half_life`.
 static func settled_stir(stir: float, delta: float, half_life: float) -> float:
 	return stir * pow(0.5, delta / maxf(half_life, 0.01))
-
-
-## A past conversation in the list: when it began and what you said first; the one under way marked.
-static func history_line(found_one: Dictionary, current: String) -> String:
-	var line: String = "%s   %s" % [found_one.get("when", ""), found_one.get("title", "")]
-	return line + "   (now)" if str(found_one.get("id", "")) == current else line
-
-
-## How wide a bubble's text is: as wide as the text, but no wider than `room`.
-static func bubble_width(text_width: float, room: float) -> float:
-	return minf(ceilf(text_width) + 2.0, room)
 
 
 ## The stream to play next: the one at `index`, or null while it has not arrived.

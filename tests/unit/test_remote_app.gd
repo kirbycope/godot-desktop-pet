@@ -3,21 +3,17 @@ extends GutTest
 ## make Android open it.
 
 
-func test_a_bubble_is_as_wide_as_its_text_up_to_the_room() -> void:
-	assert_eq(RemoteApp.bubble_width(80.4, 500.0), 83.0, "a short one shrinks to fit")
-	assert_eq(RemoteApp.bubble_width(900.0, 500.0), 500.0, "a long one wraps at the room")
-
-
-func test_yours_go_right_and_the_ducks_left() -> void:
+func test_yours_go_right_and_the_ducks_left_in_the_phones_own_bubbles() -> void:
 	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
 	add_child_autofree(app)
-	app._add_message("user", "Good morning, Ducky.")
-	app._add_message("assistant", "Good morning! Ready for coffee?")
-	var rows: Array[Node] = app.messages_box.get_children()
+	app.tabs.add_message("user", "Good morning, Ducky.")
+	app.tabs.add_message("assistant", "Good morning! Ready for coffee?")
+	var rows: Array[Node] = app.tabs.messages_box.get_children()
 	assert_eq((rows[0] as HBoxContainer).alignment, BoxContainer.ALIGNMENT_END, "yours on the right")
 	assert_eq((rows[1] as HBoxContainer).alignment, BoxContainer.ALIGNMENT_BEGIN, "the duck's on the left")
-	assert_eq((rows[0].get_child(0) as PanelContainer).get_theme_stylebox("panel"), app.your_bubble)
-	assert_eq((rows[1].get_child(0) as PanelContainer).get_theme_stylebox("panel"), app.duck_bubble)
+	var yours: StyleBox = (rows[0].get_child(0) as PanelContainer).get_theme_stylebox("panel")
+	assert_eq(yours.get_margin(SIDE_LEFT), 22.0, "the phone's theme sizes them, not the PC's")
+	assert_eq((rows[0].get_child(0).get_child(0) as Label).get_theme_color("font_color"), Color.WHITE)
 
 
 func test_audio_plays_in_order_and_waits_for_a_gap() -> void:
@@ -33,7 +29,7 @@ func test_the_scene_wires_its_signals() -> void:
 	var methods: PackedStringArray = PackedStringArray()
 	for i: int in state.get_connection_count():
 		methods.append(state.get_connection_method(i))
-	for method: String in ["_on_duck_view_gui_input", "_on_input_text_submitted", "_on_mic_toggled", "_on_send_pressed", "_on_found_item_selected", "_on_connect_pressed", "_on_code_submitted", "_on_listener_wav_ready", "_on_listener_mode_changed", "_on_player_finished", "_on_ping_clock_timeout", "_on_new_pressed", "_on_mute_toggled", "_on_past_pressed", "_on_history_item_selected", "_on_history_close_pressed"]:
+	for method: String in ["_on_duck_view_gui_input", "_on_tabs_line_sent", "_on_mic_toggled", "_on_found_item_selected", "_on_connect_pressed", "_on_code_submitted", "_on_listener_wav_ready", "_on_listener_mode_changed", "_on_player_finished", "_on_ping_clock_timeout", "_on_new_pressed", "_on_mute_toggled", "_on_past_pressed", "_on_conversation_chosen", "_on_pomodoro_pressed", "_on_lengths_changed", "_on_voice_applied", "_on_voice_tested", "_on_name_saved", "_on_memory_forgotten", "_on_hat_toggled"]:
 		assert_has(methods, method)
 
 
@@ -76,8 +72,8 @@ func test_the_mic_waits_for_the_last_sentence_to_be_heard() -> void:
 
 func test_a_past_conversation_shows_when_and_what_and_which_is_now() -> void:
 	var found_one: Dictionary = {"id": "2026-10-08_064512", "when": "2026-10-08 06:45", "title": "Good morning, Ducky."}
-	assert_eq(RemoteApp.history_line(found_one, ""), "2026-10-08 06:45   Good morning, Ducky.")
-	assert_eq(RemoteApp.history_line(found_one, "2026-10-08_064512"), "2026-10-08 06:45   Good morning, Ducky.   (now)")
+	assert_eq(DuckTabs.history_line(found_one, ""), "2026-10-08 06:45   Good morning, Ducky.")
+	assert_eq(DuckTabs.history_line(found_one, "2026-10-08_064512"), "2026-10-08 06:45   Good morning, Ducky.   (now)")
 
 
 func test_the_bath_is_calm_until_it_is_stirred() -> void:
@@ -97,30 +93,78 @@ func test_a_harder_jolt_stirs_more_and_it_settles() -> void:
 func test_the_hat_button_puts_the_hat_on_and_follows_the_pc() -> void:
 	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
 	add_child_autofree(app)
-	var button: Button = app.get_node("Layout/Chat/Margin/Column/Header/Hat")
-	assert_true(button.toggle_mode)
+	var button: CheckBox = app.get_node("Layout/Chat/Margin/Column/Tabs/Duck/HatRow/Hat")
 	button.button_pressed = true
 	assert_true(app.duck.hat, "pressed, the duck wears it")
 	app._show_hat(false)
 	assert_false(app.duck.hat, "the PC took it off")
-	assert_false(button.button_pressed, "and the button shows it")
+	assert_false(button.button_pressed, "and the box shows it")
 
 
 func test_the_phone_duck_is_a_tomato_while_the_pc_timer_runs() -> void:
 	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
 	add_child_autofree(app)
-	var button: Button = app.get_node("Layout/Chat/Margin/Column/Header/Timer")
-	assert_true(button.toggle_mode)
 	assert_false(app.duck.tomato)
 	app._on_frame({"tomato": true})
 	assert_true(app.duck.tomato)
-	assert_true(button.button_pressed, "the Timer button shows it running")
+	app._on_frame({"pomodoro_state": {"title": "Focus, round 1 of 4", "left": 1500.0, "length": 1500.0, "running": true, "paused": false, "lengths": [25, 5, 15]}})
+	assert_eq(app.tabs.time_label.text, "25:00", "the Pomodoro tab shows the PC's timer")
+	assert_eq(app.tabs.start_button.text, "Pause")
 	app._on_frame({"tomato": false})
 	assert_false(app.duck.tomato)
-	assert_false(button.button_pressed)
-	button.button_pressed = true
-	assert_false(button.button_pressed, "with no PC to ask, it comes back up")
-	assert_false(app.duck.tomato, "and the duck waits for the PC to say the timer runs")
+
+
+func test_with_no_pc_pomodoro_only_keeps_time_on_the_phone() -> void:
+	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
+	app.get_node("Pomodoro").settings_path = "user://test_phone_pomodoro.cfg"
+	add_child_autofree(app)
+	app.get_node("Pairing/Margin/Column/Alone/PomodoroOnly").pressed.emit()
+	assert_eq(app.mode, RemoteApp.Mode.POMODORO)
+	assert_false(app.pairing.visible)
+	assert_true(app.find_pc_button.visible, "a way back to the PC")
+	assert_eq(app.tabs.get_current_tab_control().name, &"Pomodoro")
+	for i: int in app.tabs.get_tab_count():
+		assert_eq(app.tabs.is_tab_disabled(i), app.tabs.get_tab_control(i).name != &"Pomodoro", "only the timer without a model")
+	app.tabs.start_button.pressed.emit()
+	assert_true(app.local_pomodoro.is_running(), "the tab works the phone's own timer")
+	assert_true(app.duck.tomato)
+	assert_eq(app.tabs.start_button.text, "Pause")
+	app.tabs.stop_button.pressed.emit()
+	assert_false(app.duck.tomato)
+	app.find_pc_button.pressed.emit()
+	assert_eq(app.mode, RemoteApp.Mode.PC)
+	assert_true(app.pairing.visible)
+	assert_false(app.tabs.is_tab_disabled(0), "every tab again")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_phone_pomodoro.cfg"))
+
+
+func test_a_welcome_fills_every_tab_from_the_pc() -> void:
+	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
+	add_child_autofree(app)
+	assert_false(app.tabs.folder_button.visible, "the duck's folder is on the PC, not here")
+	assert_true(app.tabs.mute_box.visible, "muting is this phone's own")
+	app._on_frame({
+		"welcome": "Ducky", "ready": false, "status": "Loading...", "speaks": false, "hat": true, "tomato": false,
+		"recent": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hello!"}],
+		"memories": ["likes Godot"],
+		"pomodoro_state": {"title": "Not running", "running": false, "lengths": [45, 5, 15]},
+		"stats": "Ready, thinking on the GPU.",
+		"voices": {"items": [{"id": "sys", "text": "Zira (US English)"}], "chosen": "sys", "note": "Speaking as: Zira"},
+	})
+	assert_eq(app.title.text, "Ducky")
+	assert_eq(app.tabs.name_field.text, "Ducky")
+	assert_eq(app.tabs.memory_list.item_count, 1)
+	assert_true(app.tabs.hat_box.button_pressed)
+	assert_eq(app.tabs.time_label.text, "45:00", "the PC's focus length")
+	assert_eq(app.tabs.stats.text, "Ready, thinking on the GPU.")
+	assert_eq(app.tabs.selected_voice(), "sys")
+	assert_eq(app.tabs.current_voice.text, "Speaking as: Zira")
+	assert_true(app.tabs.input.editable == false, "nothing to type into while the PC duck wakes")
+	app._on_frame({"duck_name": "Quackers", "memories": []})
+	assert_eq(app.title.text, "Quackers")
+	assert_eq(app.tabs.memory_list.item_count, 0)
+	app._on_frame({"voice_note": "Downloading natural voices: 120 of 352 MB"})
+	assert_eq(app.tabs.current_voice.text, "Downloading natural voices: 120 of 352 MB")
 
 
 func test_a_thrown_duck_bounces_off_the_sides_and_splashes_down() -> void:

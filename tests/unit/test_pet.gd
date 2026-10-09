@@ -80,7 +80,7 @@ func test_scene_wires_its_signals_in_the_scene() -> void:
 	var methods: PackedStringArray = PackedStringArray()
 	for i: int in state.get_connection_count():
 		methods.append(state.get_connection_method(i))
-	for method: String in ["_on_mic_toggled", "_on_squeak_finished", "_on_listener_heard", "_on_brain_replied", "_on_input_text_submitted", "_on_chat_stream_delta", "_on_chat_stream_finished", "_on_brain_sentence", "_on_voice_finished", "_on_test_pressed", "_on_apply_pressed", "_on_send_pressed", "_on_screen_reader_read_finished"]:
+	for method: String in ["_on_mic_toggled", "_on_squeak_finished", "_on_listener_heard", "_on_brain_replied", "_on_tabs_line_sent", "_on_chat_stream_delta", "_on_chat_stream_finished", "_on_brain_sentence", "_on_voice_finished", "_on_test_pressed", "_on_apply_pressed", "_on_tabs_new_pressed", "_on_tabs_past_pressed", "_on_tabs_conversation_chosen", "_on_screen_reader_read_finished"]:
 		assert_has(methods, method)
 
 
@@ -327,7 +327,7 @@ func test_a_long_status_never_widens_the_bubble() -> void:
 func test_the_status_takes_the_boxs_place_rather_than_a_row_of_its_own() -> void:
 	var pet: Node = (load("res://scenes/pet.tscn") as PackedScene).instantiate()
 	var chat: Node = pet.get_node("Bubble/Panel/Margin/Tabs/Chat")
-	assert_eq(chat.get_children().map(func(n: Node) -> String: return n.name), ["Text", "Entry"], "nothing between the answer and the entry row")
+	assert_eq(chat.get_children().map(func(n: Node) -> String: return n.name), ["Top", "Conversation", "PastList", "Entry"], "nothing between the conversation and the entry row")
 	assert_eq(pet.get_node("Bubble/Panel/Margin/Tabs/Chat/Entry/Status").get_index(), 0, "the status sits where the box is")
 	assert_string_contains((load("res://scripts/pet.gd") as GDScript).source_code, "bubble_input.visible = not status.visible")
 	pet.free()
@@ -337,8 +337,8 @@ func test_a_long_answer_scrolls_along_as_it_is_spoken() -> void:
 	assert_almost_eq(Pet.scroll_seconds("x".repeat(140)), 9.0, 0.01, "about as long as ten seconds of speech, less the top")
 	assert_eq(Pet.scroll_seconds("Hi!"), 0.5, "a short answer does not crawl")
 	var source: String = (load("res://scripts/pet.gd") as GDScript).source_code
-	assert_string_contains(source, "bubble_text.scroll_to_line(0)", "each answer starts from its top")
-	assert_string_contains(source, "_scroll_along(_spoken)", "and scrolls once the voice starts")
+	assert_string_contains(source, "tabs.glide_to_end(scroll_seconds(_spoken))", "glides through the answer as it is said")
+	assert_string_contains((load("res://scripts/duck_tabs.gd") as GDScript).source_code, "scroll_bar.value = top", "from the answer's top")
 
 
 const SCREEN: Rect2 = Rect2(0, 0, 1000, 600)
