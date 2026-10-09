@@ -35,20 +35,28 @@ static func forget(path: String) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
-## Unloads the model the file names, if any, and forgets it. True when there was one.
+## Frees the model the file names, if any, and forgets it. True when there was one.
 static func release(path: String) -> bool:
 	var kept: Dictionary = read(path)
 	forget(path)
 	if kept.is_empty():
 		return false
-	var command: PackedStringArray = unload_command(kept["foundry"], kept["name"], kept["llama_port"])
-	OS.create_process(command[0], command.slice(1))
+	for command: PackedStringArray in free_commands(kept["foundry"], kept["llama_port"]):
+		OS.create_process(command[0], command.slice(1))
 	return true
 
 
-## The command that frees the model, program first: stopping whichever llama-server listens on
-## `llama_port`, or `foundry model unload` when the port is 0. Foundry's daemon is shared and stays up.
-static func unload_command(foundry: String, model_name: String, llama_port: int) -> PackedStringArray:
+## The commands that free everything the duck runs, programs first: the llama-server on
+## `llama_port` (when above 0), then Foundry Local's server, which unloads what it holds as it stops.
+## The duck starts that server with no idle timeout, so left alone it would run for good.
+static func free_commands(foundry: String, llama_port: int) -> Array[PackedStringArray]:
+	var commands: Array[PackedStringArray] = []
 	if llama_port > 0:
-		return PackedStringArray(["/usr/bin/pkill", "-f", "llama-server.*--port %d" % llama_port])
-	return PackedStringArray([foundry, "model", "unload", model_name])
+		commands.append(stop_llama_command(llama_port))
+	commands.append(PackedStringArray([foundry, "server", "stop"]))
+	return commands
+
+
+## Stops whichever llama-server listens on `llama_port`.
+static func stop_llama_command(llama_port: int) -> PackedStringArray:
+	return PackedStringArray(["/usr/bin/pkill", "-f", "llama-server.*--port %d" % llama_port])

@@ -14,9 +14,12 @@ func test_a_kept_model_is_remembered_and_forgotten() -> void:
 	assert_eq(KeptModel.read(PATH), {}, "nothing kept")
 
 
-func test_foundry_unloads_by_name_and_llama_server_is_stopped_by_port() -> void:
-	assert_eq(KeptModel.unload_command("foundry", "qwen2.5-7b", 0), PackedStringArray(["foundry", "model", "unload", "qwen2.5-7b"]))
-	assert_eq(KeptModel.unload_command("foundry", "qwen2.5-14b", 39841), PackedStringArray(["/usr/bin/pkill", "-f", "llama-server.*--port 39841"]))
+func test_foundrys_server_is_stopped_and_llama_server_too_by_port() -> void:
+	assert_eq(KeptModel.free_commands("foundry", 0), [PackedStringArray(["foundry", "server", "stop"])] as Array[PackedStringArray], "stopping the server unloads its models")
+	assert_eq(KeptModel.free_commands("foundry", 39841), [
+		PackedStringArray(["/usr/bin/pkill", "-f", "llama-server.*--port 39841"]),
+		PackedStringArray(["foundry", "server", "stop"]),
+	] as Array[PackedStringArray], "on the Mac Foundry still runs the speech model")
 
 
 func test_releasing_forgets_the_model_and_does_nothing_twice() -> void:

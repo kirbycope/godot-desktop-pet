@@ -109,11 +109,18 @@ func test_the_hat_button_puts_the_hat_on_and_follows_the_pc() -> void:
 func test_the_phone_duck_is_a_tomato_while_the_pc_timer_runs() -> void:
 	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
 	add_child_autofree(app)
+	var button: Button = app.get_node("Layout/Chat/Margin/Column/Header/Timer")
+	assert_true(button.toggle_mode)
 	assert_false(app.duck.tomato)
 	app._on_frame({"tomato": true})
 	assert_true(app.duck.tomato)
+	assert_true(button.button_pressed, "the Timer button shows it running")
 	app._on_frame({"tomato": false})
 	assert_false(app.duck.tomato)
+	assert_false(button.button_pressed)
+	button.button_pressed = true
+	assert_false(button.button_pressed, "with no PC to ask, it comes back up")
+	assert_false(app.duck.tomato, "and the duck waits for the PC to say the timer runs")
 
 
 func test_a_thrown_duck_bounces_off_the_sides_and_splashes_down() -> void:

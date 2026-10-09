@@ -340,6 +340,13 @@ tooltip_text = "The captain's hat, here and on the PC"
 toggle_mode = true
 text = "Hat"
 
+[node name="Timer" type="Button" parent="Layout/Chat/Margin/Column/Header"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+tooltip_text = "Start or stop the Pomodoro timer on the PC; the duck is a tomato while it runs"
+toggle_mode = true
+text = "Timer"
+
 [node name="Past" type="Button" parent="Layout/Chat/Margin/Column/Header"]
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
@@ -533,6 +540,7 @@ wait_time = 5.0
 [connection signal="pressed" from="Layout/Chat/Margin/Column/Header/New" to="." method="_on_new_pressed"]
 [connection signal="toggled" from="Layout/Chat/Margin/Column/Header/Mute" to="." method="_on_mute_toggled"]
 [connection signal="toggled" from="Layout/Chat/Margin/Column/Header/Hat" to="." method="_on_hat_toggled"]
+[connection signal="toggled" from="Layout/Chat/Margin/Column/Header/Timer" to="." method="_on_timer_toggled"]
 [connection signal="pressed" from="Layout/Chat/Margin/Column/Header/Past" to="." method="_on_past_pressed"]
 [connection signal="item_selected" from="History/Margin/Column/List" to="." method="_on_history_item_selected"]
 [connection signal="pressed" from="History/Margin/Column/Close" to="." method="_on_history_close_pressed"]

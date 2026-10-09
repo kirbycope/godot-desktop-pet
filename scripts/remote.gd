@@ -16,7 +16,8 @@ extends Node
 ##   PC: {"conversation": id, "messages": [...]} whenever the conversation under way changes
 ##   phone: {"mute": true|false}: muted, the PC makes no audio for it, which saves the synthesis time
 ##   phone: {"hat": true|false} puts the captain's hat on or off; PC: {"hat": bool} when it changes
-##   PC: {"tomato": bool} as the Pomodoro timer starts or stops, the duck a tomato while it runs
+##   phone: {"pomodoro": true|false} starts or stops the Pomodoro timer (its Timer button);
+##   PC: {"tomato": bool} as the timer starts or stops, the duck a tomato while it runs
 ## Binary frames are audio: a kind byte, the sentence index as a little-endian uint32, then a WAV.
 ## The phone sends kind 1 (a sentence it heard, transcribed here); the PC sends kind 2 (a sentence
 ## spoken by Kokoro, for the phone to play).
@@ -159,6 +160,10 @@ func _on_text(client: Dictionary, frame: Dictionary) -> void:
 	elif frame.has("hat"):
 		if pet != null:
 			pet.set_hat(bool(frame["hat"]))
+	elif frame.has("pomodoro"):
+		# The phone's Timer button; every phone hears {"tomato": bool} as the timer starts or stops.
+		if pet != null and pet.pomodoro != null:
+			pet.pomodoro.carry_out({"action": "start" if bool(frame["pomodoro"]) else "stop"})
 	elif frame.has("new"):
 		if brain == null or not brain.new_conversation():
 			_send_to(client, {"busy": true})

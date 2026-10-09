@@ -388,7 +388,8 @@ the desk, "why does this crash?" reads your editor.
   `user://settings.cfg`. It is `scenes/hat.tscn`, the model with its four PBR textures as one
   material, sitting on the duck's head and turning with it.
 - **The tomato**: while the [Pomodoro timer](#pomodoro-timer) runs on the PC, the phone's duck is a
-  tomato as well. Asking for one from the phone works the same as at the PC.
+  tomato as well. The Timer button in the header starts it and stops it, and stays down while it
+  runs, however it was started; asking for one from the phone works the same as at the PC.
 - **The duck** sleeps until the PC's brain is awake, thinks while it waits, talks while it speaks,
   and squeezes and squeaks on every tap.
 - **Away from home**, put the PC and the phone on [Tailscale](https://tailscale.com) and type the
@@ -416,6 +417,7 @@ sentence's index as a little-endian uint32, then a WAV.
 | PC | `{"sentence": text, "index": n}`, then audio kind 2 for `n` | each sentence as it is written, then its Kokoro audio |
 | PC | `{"replied": text, "notes": ...}` | the whole answer and what the duck remembered |
 | PC | `{"status": text, "ready": bool}`, `{"busy": true}` | the brain waking; a turn already under way |
+| phone | `{"pomodoro": bool}` | the Timer button: starts or stops the Pomodoro timer |
 | PC | `{"tomato": bool}` | the Pomodoro timer started or stopped; `welcome` carries it too |
 | phone | `{"ping": t}` every 5 s | answered `{"pong": t}`; three missed and the phone reconnects |
 
@@ -521,11 +523,16 @@ Loading a model takes 40 to 50 s, so when the duck was started from the Godot ed
 chat model loaded as it closes, and the next run is up in a second or two
 (`keep_loaded_from_editor` on the Brain; it knows by the editor's debugger being attached). It
 notes the model it keeps in `user://kept_model.cfg`, and the project's own editor plugin,
-`addons/kept_model` (enabled in `project.godot`), unloads that model when the editor closes, so
-nothing stays in memory once you stop working. The duck cannot do this itself, because the editor's
-Stop button kills it before it can clean up. On the Mac that means stopping the llama-server.
-Started any other way, the duck unloads the model and frees the memory as it closes. `foundry model
-unload qwen2.5-7b` frees it by hand, for instance after the editor crashed.
+`addons/kept_model` (enabled in `project.godot`), stops Foundry Local's server when the editor
+closes, which unloads the model, so nothing stays running once you stop working. The duck cannot do
+this itself, because the editor's Stop button kills it before it can clean up. On the Mac it stops
+the llama-server too.
+
+Started any other way, the duck stops them itself as it closes: the llama-server, and Foundry
+Local's server, which it starts with no idle timeout and which would otherwise run for good (one was
+found two days later on the Mac). Stopping takes a few seconds. `foundry server stop` does it by
+hand, for instance after the editor crashed; note that any other `foundry` command starts the
+server again.
 
 Stats shows what was chosen and the budget, for example `Chat: qwen2.5-7b, 5.5 GB on the GPU.
 Speech: parakeet-tdt-0.6b-v2, 0.7 GB on the GPU. Budget: 8.4 GB on the GPU, 21.8 GB of system

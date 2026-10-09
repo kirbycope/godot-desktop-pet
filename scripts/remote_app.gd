@@ -94,6 +94,7 @@ var _utterance: int = 0
 @onready var new_button: Button = $Layout/Chat/Margin/Column/Header/New
 @onready var mute_button: Button = $Layout/Chat/Margin/Column/Header/Mute
 @onready var hat_button: Button = $Layout/Chat/Margin/Column/Header/Hat
+@onready var timer_button: Button = $Layout/Chat/Margin/Column/Header/Timer
 @onready var past_button: Button = $Layout/Chat/Margin/Column/Header/Past
 @onready var history: Control = $History
 @onready var history_list: ItemList = $History/Margin/Column/List
@@ -251,13 +252,13 @@ func _on_frame(frame: Dictionary) -> void:
 		_speaks = frame.get("speaks", false)
 		_show_conversation(frame.get("recent", []))
 		_show_hat(bool(frame.get("hat", false)))
-		duck.tomato = bool(frame.get("tomato", false))
+		_show_tomato(bool(frame.get("tomato", false)))
 		_set_awake(frame.get("ready", false), str(frame.get("status", "")))
 	elif frame.has("hat") and frame.size() == 1:
 		_show_hat(bool(frame["hat"]))
 	elif frame.has("tomato") and frame.size() == 1:
 		# A tomato while the Pomodoro timer runs on the PC.
-		duck.tomato = bool(frame["tomato"])
+		_show_tomato(bool(frame["tomato"]))
 	elif frame.has("conversations"):
 		history_list.clear()
 		for found_one: Variant in frame["conversations"]:
@@ -469,6 +470,21 @@ func _on_hat_toggled(on: bool) -> void:
 func _show_hat(on: bool) -> void:
 	duck.hat = on
 	hat_button.set_pressed_no_signal(on)
+
+
+## Starts or stops the Pomodoro timer on the PC. The duck here turns tomato, and the button stays
+## down, once the PC says the timer runs; with no PC to ask, the button comes back up.
+func _on_timer_toggled(on: bool) -> void:
+	if _client != null and _paired:
+		_client.send_text(JSON.stringify({"pomodoro": on}))
+	else:
+		timer_button.set_pressed_no_signal(false)
+
+
+## The duck a tomato, and the Timer button down, while the PC's Pomodoro timer runs.
+func _show_tomato(on: bool) -> void:
+	duck.tomato = on
+	timer_button.set_pressed_no_signal(on)
 
 
 func _on_mute_toggled(on: bool) -> void:

@@ -133,16 +133,15 @@ func _exit_tree() -> void:
 	_quitting = true
 	if _thread.is_started():
 		_thread.wait_to_finish()
-	# Free the GPU or NPU memory, unless run from the editor, which frees it as it closes (KeptModel).
+	# Free the GPU or NPU memory and stop Foundry Local's server, unless run from the editor, which
+	# frees them as it closes (KeptModel).
 	var keep: bool = keeps_model(keep_loaded_from_editor, EngineDebugger.is_active())
-	if not _llama.is_empty():
+	if not _llama.is_empty() and (model_id.is_empty() or not keep):
 		# One still downloading or loading is stopped too, and picks up where it left off next time.
-		if model_id.is_empty() or not keep:
-			_stop_llama()
-			KeptModel.forget(KeptModel.PATH)
-	elif not model_id.is_empty() and not keep:
-		var command: PackedStringArray = KeptModel.unload_command(_foundry, chat_name, 0)
-		OS.create_process(command[0], command.slice(1))
+		_stop_llama()
+	if not keep and not _foundry.is_empty():
+		for command: PackedStringArray in KeptModel.free_commands(_foundry, 0):
+			OS.create_process(command[0], command.slice(1))
 		KeptModel.forget(KeptModel.PATH)
 
 
@@ -405,7 +404,7 @@ func _llama_models_listed() -> Array:
 
 ## Stops whichever llama-server listens on the duck's port, this run's or an earlier one's.
 func _stop_llama() -> void:
-	var command: PackedStringArray = KeptModel.unload_command("", "", llama_port)
+	var command: PackedStringArray = KeptModel.stop_llama_command(llama_port)
 	OS.execute(command[0], command.slice(1))
 
 
