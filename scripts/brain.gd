@@ -48,7 +48,8 @@ signal facts_found(facts: PackedStringArray)
 @export var debug_max_tokens: int = 220
 @export var debug_temperature: float = 0.3
 ## Leave the chat model loaded when the duck closes, if it was run from the Godot editor, so the
-## next run starts in a second instead of 45. Run any other way, it frees the memory as it closes.
+## next run starts in a second instead of 45; the editor unloads it as it closes (KeptModel). Run
+## any other way, the duck frees the memory as it closes.
 @export var keep_loaded_from_editor: bool = true
 ## Messages sent with each prompt besides the system prompt: the last three exchanges. Every
 ## exchange is also written to the duck's folder (see Mind.record), and the last ones come back on
@@ -132,13 +133,17 @@ func _exit_tree() -> void:
 	_quitting = true
 	if _thread.is_started():
 		_thread.wait_to_finish()
-	# Free the GPU or NPU memory; the Foundry daemon itself is shared and stays up.
+	# Free the GPU or NPU memory, unless run from the editor, which frees it as it closes (KeptModel).
+	var keep: bool = keeps_model(keep_loaded_from_editor, EngineDebugger.is_active())
 	if not _llama.is_empty():
 		# One still downloading or loading is stopped too, and picks up where it left off next time.
-		if model_id.is_empty() or not keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
+		if model_id.is_empty() or not keep:
 			_stop_llama()
-	elif not model_id.is_empty() and not keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
-		OS.create_process(_foundry, ["model", "unload", chat_name])
+			KeptModel.forget(KeptModel.PATH)
+	elif not model_id.is_empty() and not keep:
+		var command: PackedStringArray = KeptModel.unload_command(_foundry, chat_name, 0)
+		OS.create_process(command[0], command.slice(1))
+		KeptModel.forget(KeptModel.PATH)
 
 
 ## Something the duck said on its own, such as its greeting, so the next answer follows on from it.
@@ -291,6 +296,9 @@ func _boot() -> void:
 	if not gguf.is_empty():
 		why += " Chat on llama.cpp (Metal), %s." % gguf if not llama.is_empty() else " Chat on Foundry, which is slow on a Mac: `brew install llama.cpp` for answers in a second or two."
 	call_deferred("set", "choice", why)
+	# Kept loaded between runs from the editor, which unloads it as it closes.
+	if keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
+		KeptModel.remember(KeptModel.PATH, _foundry, chosen["chat"], llama_port if not llama.is_empty() else 0)
 	if not llama.is_empty():
 		call_deferred("set", "_llama", llama)
 		if _start_llama(llama, gguf, chosen["chat"]):
@@ -397,7 +405,8 @@ func _llama_models_listed() -> Array:
 
 ## Stops whichever llama-server listens on the duck's port, this run's or an earlier one's.
 func _stop_llama() -> void:
-	OS.execute("/usr/bin/pkill", ["-f", "llama-server.*--port %d" % llama_port])
+	var command: PackedStringArray = KeptModel.unload_command("", "", llama_port)
+	OS.execute(command[0], command.slice(1))
 
 
 func _find_llama() -> String:

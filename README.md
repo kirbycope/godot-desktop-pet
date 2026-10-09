@@ -483,9 +483,13 @@ run here, and picks from the ranked lists in `resources/model_preferences.tres`:
 
 Loading a model takes 40 to 50 s, so when the duck was started from the Godot editor it leaves the
 chat model loaded as it closes, and the next run is up in a second or two
-(`keep_loaded_from_editor` on the Brain; it knows by the editor's debugger being attached). Started
-any other way, it unloads the model and frees the memory as it closes. `foundry model unload
-qwen2.5-7b` frees it by hand.
+(`keep_loaded_from_editor` on the Brain; it knows by the editor's debugger being attached). It
+notes the model it keeps in `user://kept_model.cfg`, and the project's own editor plugin,
+`addons/kept_model` (enabled in `project.godot`), unloads that model when the editor closes, so
+nothing stays in memory once you stop working. The duck cannot do this itself, because the editor's
+Stop button kills it before it can clean up. On the Mac that means stopping the llama-server.
+Started any other way, the duck unloads the model and frees the memory as it closes. `foundry model
+unload qwen2.5-7b` frees it by hand, for instance after the editor crashed.
 
 Stats shows what was chosen and the budget, for example `Chat: qwen2.5-7b, 5.5 GB on the GPU.
 Speech: parakeet-tdt-0.6b-v2, 0.7 GB on the GPU. Budget: 8.4 GB on the GPU, 21.8 GB of system
@@ -619,7 +623,7 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Mind` | `max_memories`, `max_skills` | 40 memories in the prompt, 2 skills a message |
 | `Brain` | `max_tokens`, `max_history` | 160; 6 messages, the last three exchanges, sent with each prompt |
 | `Brain` | `debug_role`, `debug_max_tokens`, `debug_temperature` | while debugging: the slim prompt, 220 tokens, 0.3 |
-| `Brain` | `keep_loaded_from_editor` | on: run from the editor, the model stays loaded on closing |
+| `Brain` | `keep_loaded_from_editor` | on: run from the editor, the model stays loaded on closing, until the editor itself closes |
 | `Pet` | `read_ahead_ms` | 3000: how old a screen read while typing may be and still be used at Send |
 | `Voice` | `volume`, `rate` | 70, 1.0 |
 | `ScreenReader` | `max_characters` | 6000 characters of screen text a message |
@@ -641,6 +645,8 @@ assets/hat/                 the captain's hat model and textures
 scripts/pet.gd              edge walking, dragging, the bubble, greetings, stats and voice settings
 scripts/duck.gd             the duck's poses and animations
 scripts/brain.gd            starts Foundry Local, picks the models, builds each prompt and checks each sentence
+scripts/kept_model.gd       notes the model a run from the editor keeps loaded, and unloads it
+addons/kept_model/          the editor plugin that unloads that model when the editor closes
 scripts/chat_stream.gd      one streamed reply from Foundry's OpenAI-compatible API, a few words at a time
 scripts/hints.gd            the checks done in code while debugging
 scripts/mind.gd             the duck's name, personality, memories and skills, in user://duck
