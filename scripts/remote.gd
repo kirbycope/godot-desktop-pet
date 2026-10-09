@@ -22,7 +22,8 @@ extends Node
 ## as they change: {"pomodoro_state": Pomodoro.state()}, {"stats": text}, {"voices": items, "chosen",
 ## "note"} or {"voice_note": text}, and {"duck_name", "memories"}. It sends {"pomodoro": action},
 ## {"lengths": [focus, short, long]}, {"voice": id}, {"test_voice": id}, {"download_voices": true},
-## {"name": text} and {"forget": index}.
+## {"name": text}, {"forget": index} and {"model": bool}, the Stats tab's button that stops the PC's
+## model or starts it again; status frames say whether it is "stopped".
 ## Binary frames are audio: a kind byte, the sentence index as a little-endian uint32, then a WAV.
 ## The phone sends kind 1 (a sentence it heard, transcribed here); the PC sends kind 2 (a sentence
 ## spoken by Kokoro, for the phone to play).
@@ -174,6 +175,10 @@ func _on_text(client: Dictionary, frame: Dictionary) -> void:
 	elif frame.has("lengths"):
 		if pet != null and pet.pomodoro != null and frame["lengths"] is Array:
 			pet.pomodoro.set_lengths(Pomodoro.clamped_lengths(frame["lengths"]))
+	elif frame.has("model"):
+		# The phone's Stats tab button: stop the PC's model to free its memory, or start it again.
+		if pet != null:
+			pet.set_model_running(bool(frame["model"]))
 	elif frame.has("voice"):
 		if pet != null:
 			pet.apply_voice(str(frame["voice"]))
@@ -287,7 +292,7 @@ func _on_pet_stats_changed(text: String) -> void:
 
 
 func _on_brain_status_changed(text: String) -> void:
-	_broadcast({"status": text, "ready": brain.is_ready()})
+	_broadcast({"status": text, "ready": brain.is_ready(), "stopped": brain.stopped})
 
 
 func _on_beacon_clock_timeout() -> void:
@@ -310,6 +315,7 @@ func welcome() -> Dictionary:
 		"hat": pet != null and pet.duck != null and pet.duck.hat,
 		"tomato": pet != null and pet.duck != null and pet.duck.tomato,
 		"ready": brain != null and brain.is_ready(),
+		"stopped": brain != null and brain.stopped,
 		"status": brain.status if brain != null else "",
 		"speaks": speaks(),
 		"recent": shown(mind.conversation(mind.conversation_id())) if mind != null else [],

@@ -181,6 +181,21 @@ func test_the_earlier_line_is_the_users_message_before_the_last() -> void:
 	assert_eq(Brain.earlier_user_line(history.slice(0, 2)), "")
 
 
+func test_the_model_is_stopped_only_once_ready_and_started_only_once_stopped() -> void:
+	var brain: Brain = load("res://scripts/brain.gd").new()
+	brain.stop_model()
+	assert_false(brain.stopped, "one still loading is not stopped: that would wait on its download")
+	brain.start_model()
+	assert_false(brain.stopped)
+	assert_false(brain._thread.is_started(), "nothing to start while it runs")
+	brain.free()
+	var wired: PackedStringArray = PackedStringArray()
+	var state: SceneState = (load("res://scenes/pet.tscn") as PackedScene).get_state()
+	for i: int in state.get_connection_count():
+		wired.append("%s.%s" % [state.get_connection_signal(i), state.get_connection_method(i)])
+	assert_has(wired, "model_toggled._on_model_toggled", "the Stats tab's button")
+
+
 func test_only_a_run_from_the_editor_keeps_the_model_loaded() -> void:
 	assert_true(Brain.keeps_model(true, true))
 	assert_false(Brain.keeps_model(true, false), "run on its own, it frees the memory")

@@ -20,6 +20,8 @@ signal conversation_chosen(id: String)
 signal pomodoro_pressed(action: String)
 ## [focus, short break, long break] in minutes.
 signal lengths_changed(minutes: Array[int])
+## The Stats tab's button: stop the language model (false) or start it again (true).
+signal model_toggled(run: bool)
 ## A voice was picked from the list, or DOWNLOAD_KOKORO, the natural voices' download entry.
 signal voice_selected(id: String)
 signal voice_tested(id: String)
@@ -67,7 +69,8 @@ var _scroll_tween: Tween
 @onready var short_box: SpinBox = $Pomodoro/Lengths/Short
 @onready var long_box: SpinBox = $Pomodoro/Lengths/Long
 @onready var tick: Timer = $Pomodoro/Tick
-@onready var stats: RichTextLabel = $Stats
+@onready var stats: RichTextLabel = $Stats/Text
+@onready var model_button: Button = $Stats/Model
 @onready var voices: OptionButton = $Settings/Voices
 @onready var test_button: Button = $Settings/Buttons/Test
 @onready var apply_button: Button = $Settings/Buttons/Apply
@@ -329,6 +332,19 @@ func _on_stop_pressed() -> void:
 
 func _on_length_changed(_value: float) -> void:
 	lengths_changed.emit([int(focus_box.value), int(short_box.value), int(long_box.value)] as Array[int])
+
+
+# Stats
+
+## The model button: Stop while a model runs, Start once it has been stopped, and grey while one is
+## loading (stopping it then would wait on a download) or when there is none to run.
+func show_model(running: bool, stopped: bool) -> void:
+	model_button.text = "Start the model" if stopped else "Stop the model"
+	model_button.disabled = not running and not stopped
+
+
+func _on_model_pressed() -> void:
+	model_toggled.emit(model_button.text == "Start the model")
 
 
 # Settings

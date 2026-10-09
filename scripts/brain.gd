@@ -81,6 +81,9 @@ const FOUNDRY_PATHS: PackedStringArray = ["foundry", "/opt/homebrew/bin/foundry"
 const LLAMA_PATHS: PackedStringArray = ["/opt/homebrew/bin/llama-server", "/usr/local/bin/llama-server"]
 
 var model_id: String = ""
+## Set while the model is stopped from the Stats tab: the duck sleeps until it is started again.
+var stopped: bool = false
+const STOPPED_STATUS: String = "Stopped: the model is not loaded. Start it again on the Stats tab."
 ## The chat and speech models chosen, as names the CLI takes, and why.
 var chat_name: String = ""
 var speech_name: String = ""
@@ -135,7 +138,7 @@ func _exit_tree() -> void:
 		_thread.wait_to_finish()
 	# Free the GPU or NPU memory and stop Foundry Local's server, unless run from the editor, which
 	# frees them as it closes (KeptModel).
-	var keep: bool = keeps_model(keep_loaded_from_editor, EngineDebugger.is_active())
+	var keep: bool = keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()) and not stopped
 	if not _llama.is_empty() and (model_id.is_empty() or not keep):
 		# One still downloading or loading is stopped too, and picks up where it left off next time.
 		_stop_llama()
@@ -143,6 +146,46 @@ func _exit_tree() -> void:
 		for command: PackedStringArray in KeptModel.free_commands(_foundry, 0):
 			OS.create_process(command[0], command.slice(1))
 		KeptModel.forget(KeptModel.PATH)
+
+
+## Stops the model and frees its memory, as closing the duck does: the llama-server and Foundry
+## Local's server. Only a model that is ready: stopping one still loading would wait on its download.
+## The duck sleeps until start_model(). The servers are stopped on the brain's thread, so the window
+## does not wait for them.
+func stop_model() -> void:
+	if not is_ready() or stopped:
+		return
+	if chat_stream != null:
+		chat_stream.cancel()
+	if _thread.is_started():
+		_thread.wait_to_finish()
+	stopped = true
+	model_id = ""
+	_thread = Thread.new()
+	_thread.start(_free_servers.bind(_llama, _foundry))
+	_llama = ""
+	_set_status(STOPPED_STATUS)
+
+
+## Starts the model again after stop_model(), once the servers have stopped.
+func start_model() -> void:
+	if not stopped:
+		return
+	stopped = false
+	if _thread.is_started():
+		_thread.wait_to_finish()
+	_thread = Thread.new()
+	_thread.start(_boot)
+
+
+## On the thread: stops what runs the model, waiting until each has gone.
+func _free_servers(llama: String, foundry: String) -> void:
+	if not llama.is_empty():
+		_stop_llama()
+	if not foundry.is_empty():
+		for command: PackedStringArray in KeptModel.free_commands(foundry, 0):
+			OS.execute(command[0], command.slice(1))
+	KeptModel.forget(KeptModel.PATH)
 
 
 ## Something the duck said on its own, such as its greeting, so the next answer follows on from it.

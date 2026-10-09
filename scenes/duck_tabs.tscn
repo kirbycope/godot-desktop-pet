@@ -251,11 +251,21 @@ value = 15.0
 
 [node name="Tick" type="Timer" parent="Pomodoro"]
 
-[node name="Stats" type="RichTextLabel" parent="."]
+[node name="Stats" type="VBoxContainer" parent="."]
 visible = false
 layout_mode = 2
-selection_enabled = true
 metadata/_tab_index = 2
+
+[node name="Text" type="RichTextLabel" parent="Stats"]
+layout_mode = 2
+size_flags_vertical = 3
+selection_enabled = true
+
+[node name="Model" type="Button" parent="Stats"]
+layout_mode = 2
+tooltip_text = "Stop the language model to free its memory, or start it again. The duck sleeps while it is stopped."
+disabled = true
+text = "Stop the model"
 
 [node name="Settings" type="VBoxContainer" parent="."]
 visible = false
@@ -388,6 +398,7 @@ text = "Open folder"
 [connection signal="value_changed" from="Pomodoro/Lengths/Short" to="." method="_on_length_changed"]
 [connection signal="value_changed" from="Pomodoro/Lengths/Long" to="." method="_on_length_changed"]
 [connection signal="timeout" from="Pomodoro/Tick" to="." method="_on_tick_timeout"]
+[connection signal="pressed" from="Stats/Model" to="." method="_on_model_pressed"]
 [connection signal="item_selected" from="Settings/Voices" to="." method="_on_voices_item_selected"]
 [connection signal="pressed" from="Settings/Buttons/Test" to="." method="_on_test_pressed"]
 [connection signal="pressed" from="Settings/Buttons/Apply" to="." method="_on_apply_pressed"]

@@ -3,6 +3,9 @@
 # The test runner, third-party and never committed here; see README.md for the one-line clone.
 addons/gut/
 
+# NobodyWho, the phone's local LLM, also third-party and fetched: python tools/fetch_nobodywho.py
+addons/nobodywho/
+
 # Python bytecode caches from the scripts in tools/
 __pycache__/
 *.pyc
@@ -20,3 +23,6 @@ build/
 /screenshots/
 .mcp/
 /build/
+
+# Godot's Android build template, installed by the export (--install-android-build-template).
+/android/

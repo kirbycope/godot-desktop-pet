@@ -409,6 +409,7 @@ item_0/id = 0
 [connection signal="conversation_chosen" from="Bubble/Panel/Margin/Tabs" to="." method="_on_tabs_conversation_chosen"]
 [connection signal="pomodoro_pressed" from="Bubble/Panel/Margin/Tabs" to="Pomodoro" method="act"]
 [connection signal="lengths_changed" from="Bubble/Panel/Margin/Tabs" to="Pomodoro" method="set_lengths"]
+[connection signal="model_toggled" from="Bubble/Panel/Margin/Tabs" to="." method="_on_model_toggled"]
 [connection signal="voice_selected" from="Bubble/Panel/Margin/Tabs" to="." method="_on_voice_selected"]
 [connection signal="voice_tested" from="Bubble/Panel/Margin/Tabs" to="." method="_on_test_pressed"]
 [connection signal="voice_applied" from="Bubble/Panel/Margin/Tabs" to="." method="_on_apply_pressed"]

@@ -138,6 +138,82 @@ func test_with_no_pc_pomodoro_only_keeps_time_on_the_phone() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_phone_pomodoro.cfg"))
 
 
+func test_with_no_pc_the_local_duck_has_every_tab_but_no_mic() -> void:
+	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
+	app.get_node("Mind").root = "user://test_phone_mind"
+	app.get_node("Pomodoro").settings_path = "user://test_phone_pomodoro.cfg"
+	add_child_autofree(app)
+	# The mode only: start() would fetch a model.
+	app._go_alone(RemoteApp.Mode.LOCAL)
+	assert_eq(app.mode, RemoteApp.Mode.LOCAL)
+	for i: int in app.tabs.get_tab_count():
+		assert_false(app.tabs.is_tab_disabled(i), "every tab: the duck runs here")
+	assert_true(app.tabs.mic_button.disabled, "the PC writes speech down, so no mic here")
+	assert_false(app.tabs.input.editable, "nothing to type to until a model is ready")
+	assert_string_contains(app.tabs.stats.text, "Model: not loaded yet")
+	assert_eq(app.tabs.pairing_label.text, "No PC: the duck runs on this phone.")
+	app._on_tabs_line_sent("start a pomodoro")
+	assert_true(app.local_pomodoro.is_running(), "the timer answers without a model")
+	assert_true(app.duck.tomato)
+	app._on_tabs_line_sent("stop the pomodoro")
+	assert_false(app.local_pomodoro.is_running())
+	app.tabs.name_field.text = "Pip"
+	app.tabs.name_field.text_submitted.emit("Pip")
+	assert_eq(app.mind.duck_name(), "Pip", "the Duck tab names the phone's own duck")
+	app.find_pc_button.pressed.emit()
+	assert_eq(app.mode, RemoteApp.Mode.PC)
+	assert_true(app.local_brain.stopped, "the model lets go on the way back")
+	assert_false(app.local_brain.is_ready())
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_phone_pomodoro.cfg"))
+	_remove(ProjectSettings.globalize_path("user://test_phone_mind"))
+
+
+func _remove(folder: String) -> void:
+	if not DirAccess.dir_exists_absolute(folder):
+		return
+	for sub: String in DirAccess.get_directories_at(folder):
+		_remove(folder.path_join(sub))
+	for file: String in DirAccess.get_files_at(folder):
+		DirAccess.remove_absolute(folder.path_join(file))
+	DirAccess.remove_absolute(folder)
+
+
+func test_the_phones_model_stops_in_the_background_and_from_the_stats_tab() -> void:
+	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
+	app.get_node("Mind").root = "user://test_phone_mind"
+	# A model that cannot load, so nothing is downloaded when it wakes again.
+	app.get_node("LocalBrain").model_path = "res://no_such_model.gguf"
+	add_child_autofree(app)
+	app._go_alone(RemoteApp.Mode.LOCAL)
+	# As though a model had loaded.
+	app.local_brain.engine = "NobodyWho"
+	app._on_local_brain_status_changed("Ready, thinking on this phone.")
+	assert_eq(app.tabs.model_button.text, "Stop the model")
+	app._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	assert_true(app.local_brain.stopped, "in the background its memory goes")
+	assert_false(app.local_brain.is_ready())
+	app._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	assert_false(app.local_brain.stopped, "and back in front it wakes again")
+	await wait_until(func() -> bool: return not app.local_brain.is_starting(), 10.0)
+	if ClassDB.class_exists(&"NobodyWhoChat"):
+		assert_engine_error("Model not found", "the stand-in model is not there, as meant")
+	app.local_brain.engine = "NobodyWho"
+	app.tabs.model_button.pressed.emit()
+	assert_true(app.local_brain.stopped, "Stop on the Stats tab")
+	assert_eq(app.tabs.model_button.text, "Start the model")
+	_remove(ProjectSettings.globalize_path("user://test_phone_mind"))
+
+
+func test_a_paired_phones_model_button_works_the_pcs_model() -> void:
+	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
+	add_child_autofree(app)
+	app._on_frame({"status": "Stopped: the model is not loaded.", "ready": false, "stopped": true})
+	assert_eq(app.tabs.model_button.text, "Start the model", "the PC's model is stopped")
+	assert_false(app.tabs.model_button.disabled)
+	app._on_frame({"status": "Ready, thinking on the GPU.", "ready": true, "stopped": false})
+	assert_eq(app.tabs.model_button.text, "Stop the model")
+
+
 func test_a_welcome_fills_every_tab_from_the_pc() -> void:
 	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
 	add_child_autofree(app)

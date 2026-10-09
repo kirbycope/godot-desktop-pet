@@ -45,7 +45,7 @@ window/handheld/orientation.android=1
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/kept_model/plugin.cfg")
+enabled=PackedStringArray("res://addons/GeminiNano/plugin.cfg", "res://addons/gut/plugin.cfg", "res://addons/kept_model/plugin.cfg")
 
 [input_devices]
 

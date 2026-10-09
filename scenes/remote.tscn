@@ -18,6 +18,8 @@
 [ext_resource type="Script" path="res://scripts/suds.gd" id="12"]
 [ext_resource type="PackedScene" path="res://scenes/duck_tabs.tscn" id="tabs"]
 [ext_resource type="Script" path="res://scripts/pomodoro.gd" id="pomodoro"]
+[ext_resource type="Script" path="res://scripts/mind.gd" id="mind"]
+[ext_resource type="Script" path="res://scripts/local_brain.gd" id="local_brain"]
 
 [sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_fast"]
 streams_count = 5
@@ -542,6 +544,13 @@ script = ExtResource("pomodoro")
 [node name="PhaseTimer" type="Timer" parent="Pomodoro"]
 one_shot = true
 
+[node name="Mind" type="Node" parent="."]
+script = ExtResource("mind")
+
+[node name="LocalBrain" type="Node" parent="." node_paths=PackedStringArray("mind")]
+script = ExtResource("local_brain")
+mind = NodePath("../Mind")
+
 [node name="Listener" type="Node" parent="."]
 script = ExtResource("3")
 hand_off = true
@@ -576,6 +585,7 @@ wait_time = 5.0
 [connection signal="conversation_chosen" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_conversation_chosen"]
 [connection signal="pomodoro_pressed" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_pomodoro_pressed"]
 [connection signal="lengths_changed" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_lengths_changed"]
+[connection signal="model_toggled" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_model_toggled"]
 [connection signal="voice_selected" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_selected"]
 [connection signal="voice_tested" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_tested"]
 [connection signal="voice_applied" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_applied"]
@@ -592,5 +602,10 @@ wait_time = 5.0
 [connection signal="phase_changed" from="Pomodoro" to="." method="_on_local_pomodoro_phase_changed"]
 [connection signal="time_up" from="Pomodoro" to="." method="_on_local_pomodoro_time_up"]
 [connection signal="changed" from="Pomodoro" to="." method="_on_local_pomodoro_changed"]
+
+[connection signal="status_changed" from="LocalBrain" to="." method="_on_local_brain_status_changed"]
+[connection signal="sentence" from="LocalBrain" to="." method="_on_local_brain_sentence"]
+[connection signal="replied" from="LocalBrain" to="." method="_on_local_brain_replied"]
+[connection signal="changed" from="Mind" to="." method="_on_mind_changed"]
 
 [editable path="Layout/Chat/Margin/Column/Tabs"]

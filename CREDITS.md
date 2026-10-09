@@ -11,6 +11,7 @@ Third-party work in this repository: who made it, where it came from, its licenc
 | `assets/water/bubbles.gdshader` | Bubble Shader, the rainbow-rimmed bubbles | Yui Kinomoto (@arlez80) | MIT | via godot-4.5-sandbox-3d (`scenes/props/bubble/`) |
 | `assets/icons` | `microphone.svg` from Mobile Controls 1.0 | Kenney | CC0 (`License.txt`) | https://kenney.nl |
 | `bin/windows/kokoro-server.exe` | Built from `tools/kokoro_server/kokoro_server.c` against sherpa-onnx's C API | this project; sherpa-onnx by k2-fsa | sherpa-onnx: Apache 2.0 | https://github.com/k2-fsa/sherpa-onnx |
+| `android_plugin` (its Gradle wrapper, build files and layout) and `addons/GeminiNano`, built from it | Godot Android Plugin Template | Fredia Huya-Kouadio | MIT (`android_plugin/LICENSE`) | https://github.com/m4gr3d/Godot-Android-Plugin-Template |
 
 The window technique comes from DigiKey's [Desktop Pet](https://www.digikey.com/en/maker/projects/desktop-pet/994f9b5997fa4d6899c022c9b23724a6)
 maker project. None of its sprites are used here.
@@ -25,6 +26,19 @@ On macOS the chat model is downloaded instead by [llama.cpp](https://github.com/
 0.5B (Apache 2.0, by the Qwen team) and Phi-4-mini-instruct (MIT, by Microsoft), each at Q4_K_M.
 
 [GUT](https://github.com/bitwes/Gut) (MIT) runs the tests and is fetched, not committed.
+
+The phone app's local LLM, for when there is no PC:
+
+- [NobodyWho](https://github.com/nobodywho-ooo/nobodywho) 12.1.0, by the NobodyWho authors, EUPL 1.2,
+  is fetched into `addons/nobodywho` by `tools/fetch_nobodywho.py` and not committed. It is built on
+  [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT). The model it picks for the phone's memory
+  is downloaded at run time from NobodyWho's Hugging Face mirrors and is not part of this repository:
+  Qwen3, Qwen3.5 and Qwen3.6 (Apache 2.0, by the Qwen team) or Gemma 4 (the Gemma terms of use, by
+  Google), each at Q4_K_M.
+- Gemini Nano is Android's own model, run by the phone's AICore and reached through Google's
+  [ML Kit GenAI Prompt API](https://developers.google.com/ml-kit/genai/prompt/android/get-started)
+  (`com.google.mlkit:genai-prompt`, under the ML Kit terms of service), which the Android export
+  adds from Google's Maven repository. Neither is part of this repository.
 
 The natural voices are downloaded at run time into `user://kokoro` when asked for, and are not
 part of this repository: the Kokoro v1.0 model (82M parameters, by hexgrad, Apache 2.0,

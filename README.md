@@ -63,7 +63,7 @@ the phone look and work alike:
 | --- | --- |
 | Chat | the conversation as message bubbles, yours on the right in blue and the duck's on the left, the duck's growing as its sentences arrive and showing what it is doing until then ("Looking at your screen..."); what it remembered, small and grey under the answer; New and Past (see [On your phone](#on-your-phone)); and the box to type in |
 | Pomodoro | the Pomodoro timer: the phase and round, the time left, Start (then Pause and Resume), Skip and Stop, and the focus, break and long-break lengths in minutes; see [Pomodoro timer](#pomodoro-timer) |
-| Stats | the brain's state (`Ready, thinking on the GPU.`), the NPU and GPU with their TOPS, the model, the voice, and how much the last look at the screen read (or why it failed) |
+| Stats | the brain's state (`Ready, thinking on the GPU.`), the NPU and GPU with their TOPS, the model, the voice, and how much the last look at the screen read (or why it failed); and **Stop the model**, which frees its memory as closing the duck does (the llama-server and Foundry Local's server, which takes about 20 s to go) with the duck asleep until **Start the model** loads it again (about 50 s). It is grey while a model loads, since stopping one then would wait on its download. On the phone it works the phone's own model, or a paired PC's |
 | Settings | every text-to-speech voice the system offers. Test says a line in the selected one without changing anything; Apply makes it the duck's voice and saves it |
 | Duck | its name, its captain's hat, and what it remembers; see below |
 
@@ -408,7 +408,25 @@ the desk, "why does this crash?" reads your editor.
   screen stays on while it runs, and the timer counts by the clock rather than by frames, so when
   Android puts the app to sleep in the background it catches up on waking (measured on a Galaxy
   S24 Ultra: a one-minute focus left in the background for 80 s came back 20 s into its break).
-  **Find PC** in the header goes back to the pairing card. **Try local LLM** is next.
+  **Find PC** in the header goes back to the pairing card.
+- **Try local LLM** runs the whole duck on the phone (`scripts/local_brain.gd`, `LocalBrain`): its
+  own name, personality, memories and conversations (a `Mind` in the phone's `user://duck`, seeded
+  from `seed/` as on the PC), its own Pomodoro timer, every tab working, and answers said in the
+  phone's own voice, picked on its Settings tab. It loads what the phone can run: first Gemini Nano,
+  Android's own model, which AICore runs on the phone's NPU (through the `GeminiNano` plugin, below),
+  and where the phone has none, the largest model that fits its free memory through
+  [NobodyWho](https://github.com/nobodywho-ooo/nobodywho) (llama.cpp on the GPU, `model_path`
+  "auto": from Qwen3 0.6B up to Gemma 4 12B; on a 12 GB phone one of 2 to 4B, a 1.5 to 3 GB
+  download the first time, then offline). "Auto" judges by the memory free at that moment, so once
+  a model is downloaded it stays the duck's model and later starts load it straight away. The header
+  and the Stats tab name it and count the download's megabytes as they come. On a Galaxy S24 Ultra,
+  whose AICore does not offer Gemini Nano to apps (`606 FEATURE_NOT_FOUND`), it picked Qwen 3.5 2B,
+  1.2 GB in about a minute and a half; the first answer took under a minute, most of it reading the
+  duck's personality, and the next ones a few seconds, as that stays read. Thinking is turned off, as the PC duck leaves reasoning
+  models out, and emoji and markdown are never said. The mic is off in this mode, since speech is
+  written down on the PC; type instead. The model lets go of its memory whenever it is not in use:
+  when the app goes to the background (and wakes again, from the model already downloaded, when it
+  comes back), when the app closes, on **Stop the model** on the Stats tab, and on **Find PC**.
 
 Measured on the PC and an Android emulator on it (October 2026): the PC's echo of your line in a few
 milliseconds, the first sentence on the phone 1.3 s after sending, and the first sentence's audio
@@ -440,6 +458,7 @@ sentence's index as a little-endian uint32, then a WAV.
 | phone | `{"name": text}`, `{"forget": index}`, `{"hat": bool}` | the Duck tab |
 | PC | `{"duck_name": text, "memories": [...]}`, `{"hat": bool}` | the Duck tab as it changes |
 | phone | `{"mute": bool}` | the phone's Mute: no audio is made for it |
+| phone | `{"model": bool}` | the Stats tab's button: stop the PC's model, or start it again; status frames and `welcome` say whether it is `"stopped"` |
 | phone | `{"ping": t}` every 5 s | answered `{"pong": t}`; three missed and the phone reconnects |
 
 The phone app is `scenes/remote.tscn` with `scripts/remote_app.gd`, in this same project. Android
@@ -456,13 +475,24 @@ settings, and the export templates for this exact Godot build (4.8-dev6). On thi
 passing the package name in a `--package_file`, since a `.bat` splits it at the semicolon), and the
 templates from the `4.8-dev6` release of godot-builds. Then:
 
+The local LLM needs two more things, once: NobodyWho, fetched rather than committed, and the
+`GeminiNano` plugin's AARs, built from `android_plugin/` with its Gradle wrapper into
+`addons/GeminiNano/` (the AARs are committed, so this is only needed after changing the plugin).
+The export is a Gradle build, which also installs Godot's Android build template into `android/`
+(git-ignored) and fetches ML Kit from Google's Maven repository, so the first one takes a few
+minutes:
+
 ```powershell
-& 'C:\Godot\godot.exe' --headless --path . --export-debug "Android" build/duck.apk
+python tools/fetch_nobodywho.py
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"; .\android_plugin\gradlew.bat -p android_plugin assemble
+& 'C:\Godot\godot.exe' --headless --path . --install-android-build-template --export-debug "Android" build/duck.apk
 adb install -r build/duck.apk
 ```
 
-The `Android` preset in `export_presets.cfg` builds for arm64 phones and x86_64 emulators, asks for
-the internet, Wi-Fi state and microphone permissions, and leaves the tests, tools and seed out.
+The `Android` preset in `export_presets.cfg` builds for arm64 phones and x86_64 emulators (NobodyWho
+ships arm64 only), on Android 8.0 or later (what ML Kit asks for), asks for the internet, Wi-Fi
+state and microphone permissions, and leaves the tests and tools out; `seed/` goes in, for the
+phone's own duck.
 `tools/make_icon.gd` renders the duck into the app's icon. To try it without a phone, run an
 Android Studio emulator and `tools/remote_host.gd` on the PC: the emulator reaches the PC at
 `10.0.2.2` (its own network does not carry the beacon), and the host prints the code. To check the
@@ -682,6 +712,7 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Duck` | `tomato_skin`, `tomato_beak` | the tomato's red body and red-orange beak, materials in `duck.tscn` |
 | `Pet` | `leaf_reach` | 26 px: how far above the head the part that takes the mouse reaches while it is a tomato, so the leaves are drawn |
 | `Pet` | `dock_margin`, `dock_seconds` | 8 px from the right and 40 px from the top: where the duck sits while the timer runs; 0.9 s to glide there |
+| `LocalBrain` (phone app) | `model_path`, `context_tokens`, `role` | "auto": the largest NobodyWho model that fits the phone's free memory, or an `hf://` path to a .gguf; 4096 tokens; the phone duck's job |
 | `Pomodoro` | `rounds` | 4 focus rounds before the long break; the lengths themselves are on the tab |
 | `Brain` | `preferences` | `resources/model_preferences.tres`: the ranked model lists and `memory_share` |
 | `Brain` | `model_alias` | empty, so the model is chosen for the machine; set it to force one |
@@ -729,7 +760,11 @@ scripts/screen_reader.gd    captures the screen and reads it with the system OCR
 scripts/searcher.gd         looks things up on DuckDuckGo when asked to
 scripts/remote.gd           lets the phone app talk to the duck: the WebSocket server and the beacon
 scenes/remote.tscn          the phone app: the duck on top, the same tabs below, in the phone's sizes
-scripts/remote_app.gd       the phone app's pairing, chat, voice and the duck's moods
+scripts/remote_app.gd       the phone app's pairing, chat, voice and the duck's moods, and its two modes with no PC
+scripts/local_brain.gd      the phone's own brain with no PC: Gemini Nano, or NobodyWho
+android_plugin/             the GeminiNano Android plugin's Kotlin source and Gradle project
+addons/GeminiNano/          the plugin, built: its AARs and the export script that adds it and ML Kit to the app
+tools/fetch_nobodywho.py    fetches NobodyWho into addons/nobodywho
 scripts/suds.gd             the bubble bath's foam, round the duck and floating about
 assets/water/               the phone's bath: the water, the bubbles and the suds shaders
 export_presets.cfg          the Android export

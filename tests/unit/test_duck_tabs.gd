@@ -105,6 +105,21 @@ func test_the_duck_tab_says_its_name_hat_and_memories_and_passes_on_changes() ->
 	assert_signal_emitted_with_parameters(tabs, "memory_forgotten", [1])
 
 
+func test_the_stats_tab_stops_and_starts_the_model() -> void:
+	assert_true(tabs.model_button.disabled, "nothing to stop before a model runs")
+	tabs.show_model(true, false)
+	assert_eq(tabs.model_button.text, "Stop the model")
+	assert_false(tabs.model_button.disabled)
+	tabs.model_button.pressed.emit()
+	assert_signal_emitted_with_parameters(tabs, "model_toggled", [false])
+	tabs.show_model(false, true)
+	assert_eq(tabs.model_button.text, "Start the model")
+	tabs.model_button.pressed.emit()
+	assert_signal_emitted_with_parameters(tabs, "model_toggled", [true])
+	tabs.show_model(false, false)
+	assert_true(tabs.model_button.disabled, "grey while one is loading")
+
+
 func test_a_bubble_is_as_wide_as_its_text_up_to_the_room() -> void:
 	assert_eq(DuckTabs.bubble_width(120.4, 600.0), 123.0)
 	assert_eq(DuckTabs.bubble_width(900.0, 600.0), 600.0)

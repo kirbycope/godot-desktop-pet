@@ -86,8 +86,10 @@ var _utterance: int = 0
 ## The same tabs as the PC's bubble (scenes/duck_tabs.tscn).
 @onready var tabs: DuckTabs = $Layout/Chat/Margin/Column/Tabs
 @onready var find_pc_button: Button = $Layout/Chat/Margin/Column/Header/FindPc
-## The phone's own timer, for when there is no PC.
+## The phone's own timer, mind and brain, for when there is no PC.
 @onready var local_pomodoro: Pomodoro = $Pomodoro
+@onready var mind: Mind = $Mind
+@onready var local_brain: LocalBrain = $LocalBrain
 @onready var pairing: Control = $Pairing
 @onready var found_list: ItemList = $Pairing/Margin/Column/Found
 @onready var address: LineEdit = $Pairing/Margin/Column/Address
@@ -254,6 +256,7 @@ func _on_frame(frame: Dictionary) -> void:
 		var voices: Dictionary = frame.get("voices", {})
 		tabs.show_voices(voices.get("items", []), str(voices.get("chosen", "")), str(voices.get("note", "")))
 		tabs.pairing_label.text = "Paired with the duck at %s." % _host
+		tabs.show_model(bool(frame.get("ready", false)), bool(frame.get("stopped", false)))
 		_set_awake(frame.get("ready", false), str(frame.get("status", "")))
 	elif frame.has("hat") and frame.size() == 1:
 		_show_hat(bool(frame["hat"]))
@@ -283,6 +286,7 @@ func _on_frame(frame: Dictionary) -> void:
 	elif frame.has("pong"):
 		_missed = 0
 	elif frame.has("status"):
+		tabs.show_model(bool(frame.get("ready", _awake)), bool(frame.get("stopped", false)))
 		_set_awake(frame.get("ready", _awake), str(frame["status"]))
 	elif frame.has("you"):
 		if str(frame["you"]).is_empty():
@@ -397,9 +401,22 @@ func _tell_pc(frame: Dictionary) -> bool:
 	return true
 
 
-## Typed and sent on the Chat tab.
+## Typed and sent on the Chat tab: to the PC, or with no PC to the phone's own duck, which answers a
+## Pomodoro request itself as the PC does.
 func _on_tabs_line_sent(line: String) -> void:
-	_tell_pc({"say": line})
+	if mode != Mode.LOCAL:
+		_tell_pc({"say": line})
+		return
+	var request: Dictionary = Pomodoro.request_in(line)
+	if not request.is_empty():
+		var said: String = local_pomodoro.carry_out(request)
+		tabs.begin_answer(line, said)
+		_speak_here(said, true)
+		return
+	if local_brain.ask(line):
+		tabs.begin_answer(line)
+		duck.play(&"think")
+		_set_local_entry()
 
 
 ## The duck's name, as the title and on the Duck tab, and what it remembers.
@@ -441,8 +458,10 @@ func _on_pomodoro_only_pressed() -> void:
 	_go_alone(Mode.POMODORO)
 
 
+## The duck on its own with a model on the phone: Gemini Nano, or the largest that fits.
 func _on_local_llm_pressed() -> void:
-	pairing_note.text = "The local LLM is not here yet; Pomodoro only works without a PC."
+	_go_alone(Mode.LOCAL)
+	local_brain.start()
 
 
 ## Stops looking for the PC and runs the duck on the phone: in Pomodoro only, every tab but the
@@ -456,22 +475,160 @@ func _go_alone(alone: Mode) -> void:
 	ping_clock.stop()
 	pairing.visible = false
 	find_pc_button.visible = true
-	title.text = "Pomodoro" if alone == Mode.POMODORO else "Ducky"
-	_set_status("No PC: just the timer" if alone == Mode.POMODORO else "")
+	_set_status("No PC: just the timer" if alone == Mode.POMODORO else local_brain.status)
 	for i: int in tabs.get_tab_count():
 		tabs.set_tab_disabled(i, alone == Mode.POMODORO and tabs.get_tab_control(i).name != &"Pomodoro")
-	tabs.current_tab = tabs.get_tab_idx_from_control(tabs.get_node("Pomodoro"))
 	tabs.show_pomodoro(local_pomodoro.state())
 	duck.tomato = local_pomodoro.is_running()
 	duck.play(&"wake")
 	_awake = true
+	if alone == Mode.POMODORO:
+		title.text = "Pomodoro"
+		tabs.current_tab = tabs.get_tab_idx_from_control(tabs.get_node("Pomodoro"))
+		return
+	# The phone's own duck: its name, memories and conversation, its voices, and no PC to listen.
+	_show_duck(mind.duck_name(), Array(mind.memories()))
+	tabs.show_conversation(Remote.shown(mind.conversation(mind.conversation_id())))
+	_fill_phone_voices()
+	tabs.stats.text = local_stats()
+	tabs.pairing_label.text = "No PC: the duck runs on this phone."
+	tabs.current_tab = 0
+	_set_local_entry()
 
 
-## Back to looking for the PC: the phone's own timer stops, as the PC keeps its own.
+## In local mode the box opens once a model is ready; the mic stays off, as the PC is what writes
+## down speech.
+func _set_local_entry() -> void:
+	tabs.input.editable = local_brain.is_ready()
+	tabs.send_button.disabled = not local_brain.is_ready() or local_brain.is_busy()
+	tabs.mic_button.disabled = true
+	tabs.mic_button.tooltip_text = "Talking needs the PC, which writes down what you say. Type here instead."
+	tabs.new_button.disabled = false
+	tabs.past_button.disabled = false
+
+
+func _on_local_brain_status_changed(text: String) -> void:
+	if mode != Mode.LOCAL:
+		return
+	_set_status(text if not local_brain.is_ready() else "")
+	tabs.stats.text = local_stats()
+	tabs.show_model(local_brain.is_ready(), local_brain.stopped)
+	_set_local_entry()
+	duck.play(&"idle" if local_brain.is_ready() else &"sleep")
+
+
+## The Stats tab's button: the phone's own model with no PC, or the PC's from a paired phone.
+func _on_model_toggled(run: bool) -> void:
+	if mode != Mode.LOCAL:
+		_tell_pc({"model": run})
+		return
+	if run:
+		local_brain.start()
+	else:
+		DisplayServer.tts_stop()
+		local_brain.stop()
+
+
+## Whether the phone's model is to wake again when the app comes back from the background.
+var _wake_local: bool = false
+
+
+## A phone app in the background holds its memory for nothing, and closing it must not leave a model
+## behind, so the phone's model stops as the app goes to the background or closes; coming back wakes
+## it again, from the model already downloaded.
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_APPLICATION_PAUSED:
+			if mode == Mode.LOCAL and (local_brain.is_ready() or local_brain.is_starting()):
+				_wake_local = true
+				DisplayServer.tts_stop()
+				local_brain.stop()
+		NOTIFICATION_APPLICATION_RESUMED:
+			if _wake_local and mode == Mode.LOCAL:
+				_wake_local = false
+				local_brain.start()
+		NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_PREDELETE:
+			if is_instance_valid(local_brain):
+				local_brain.stop()
+
+
+func _on_local_brain_sentence(text: String) -> void:
+	if mode != Mode.LOCAL:
+		return
+	tabs.add_sentence(text)
+	_speak_here(text, false)
+	duck.play(&"talk")
+
+
+func _on_local_brain_replied(text: String) -> void:
+	if mode != Mode.LOCAL:
+		return
+	if not tabs.answer_started():
+		tabs.set_answer(text)
+		_speak_here(text, false)
+	tabs.add_note(_take_notes())
+	_set_status("")
+	_set_local_entry()
+	duck.play(&"idle")
+
+
+## What the duck remembered or learned on the way, noted under the answer.
+var _notes: Array[String] = []
+
+
+func _on_mind_changed(note: String) -> void:
+	_notes.append(note)
+	if mode == Mode.LOCAL:
+		_show_duck(mind.duck_name(), Array(mind.memories()))
+
+
+func _take_notes() -> String:
+	var text: String = "; ".join(_notes)
+	_notes.clear()
+	return text
+
+
+## The Stats tab with no PC: which model answers on this phone, and how it is going.
+func local_stats() -> String:
+	return "%s\nModel: %s\nEngine: %s" % [local_brain.status, local_brain.model_name if not local_brain.model_name.is_empty() else "not loaded yet", local_brain.engine if not local_brain.engine.is_empty() else "none yet"]
+
+
+## Says `text` in this phone's voice, after what it is saying unless `interrupt`.
+func _speak_here(text: String, interrupt: bool) -> void:
+	if _muted or not DisplayServer.has_feature(DisplayServer.FEATURE_TEXT_TO_SPEECH):
+		return
+	_utterance += 1
+	DisplayServer.tts_speak(text, _phone_voice(), 70, 1.0, 1.0, _utterance, interrupt)
+
+
+## The phone voice chosen on the Settings tab in local mode, or the phone's default for its language.
+func _phone_voice() -> String:
+	var config: ConfigFile = ConfigFile.new()
+	config.load(SETTINGS_PATH)
+	var chosen: String = str(config.get_value("sound", "voice", ""))
+	var voices: Array[Dictionary] = DisplayServer.tts_get_voices()
+	if not chosen.is_empty() and voices.any(func(v: Dictionary) -> bool: return v.get("id", "") == chosen):
+		return chosen
+	return Voice.default_voice(voices, OS.get_locale_language())
+
+
+## The Settings tab's voices with no PC: the phone's own.
+func _fill_phone_voices() -> void:
+	var items: Array[Dictionary] = DuckTabs.voice_items(DisplayServer.tts_get_voices(), false, false, "")
+	var chosen: String = _phone_voice()
+	tabs.show_voices(items, chosen, "Speaking with this phone's voice." if not items.is_empty() else "This phone offers no voices; answers are written only.")
+
+
+## Back to looking for the PC: the phone's own timer stops, as the PC keeps its own, and its model
+## lets go of the memory.
 func _on_find_pc_pressed() -> void:
 	mode = Mode.PC
 	if local_pomodoro.is_running():
 		local_pomodoro.stop()
+	local_brain.stop()
+	DisplayServer.tts_stop()
+	tabs.show_model(false, false)
+	tabs.mic_button.tooltip_text = "Talk to the duck. It sends when you pause, and listens again after it answers. Click again to stop."
 	find_pc_button.visible = false
 	for i: int in tabs.get_tab_count():
 		tabs.set_tab_disabled(i, false)
@@ -519,13 +676,23 @@ func _on_voice_selected(id: String) -> void:
 		_tell_pc({"download_voices": true})
 
 
-## Test says the line on the PC, the way the PC's own Test does.
+## Test says the line on the PC, the way the PC's own Test does; with no PC, here.
 func _on_voice_tested(id: String) -> void:
-	_tell_pc({"test_voice": id})
+	if mode != Mode.LOCAL:
+		_tell_pc({"test_voice": id})
+	elif not id.is_empty():
+		DisplayServer.tts_speak("Quack! I'm your rubber duck. Is this how you want me to sound?", id, 70, 1.0, 1.0, 0, true)
 
 
 func _on_voice_applied(id: String) -> void:
-	_tell_pc({"voice": id})
+	if mode != Mode.LOCAL:
+		_tell_pc({"voice": id})
+		return
+	var config: ConfigFile = ConfigFile.new()
+	config.load(SETTINGS_PATH)
+	config.set_value("sound", "voice", id)
+	config.save(SETTINGS_PATH)
+	_fill_phone_voices()
 
 
 ## The phone's own microphone.
@@ -534,11 +701,17 @@ func _on_mic_chosen(device: String) -> void:
 
 
 func _on_name_saved(duck_name: String) -> void:
-	_tell_pc({"name": duck_name})
+	if mode == Mode.LOCAL:
+		mind.set_duck_name(duck_name)
+	else:
+		_tell_pc({"name": duck_name})
 
 
 func _on_memory_forgotten(index: int) -> void:
-	_tell_pc({"forget": index})
+	if mode == Mode.LOCAL:
+		mind.forget_at(index)
+	else:
+		_tell_pc({"forget": index})
 
 
 func _on_mute_toggled(on: bool) -> void:
@@ -553,15 +726,27 @@ func _on_mute_toggled(on: bool) -> void:
 
 
 func _on_new_pressed() -> void:
+	if mode == Mode.LOCAL:
+		if not local_brain.is_busy():
+			local_brain.new_conversation()
+			tabs.show_conversation([])
+		return
 	_tell_pc({"new": true})
 
 
 func _on_past_pressed() -> void:
-	if not _tell_pc({"list": true}):
+	if mode == Mode.LOCAL:
+		tabs.show_past(mind.conversations(), mind.conversation_id())
+	elif not _tell_pc({"list": true}):
 		tabs.show_past([], "")
 
 
 func _on_conversation_chosen(id: String) -> void:
+	if mode == Mode.LOCAL:
+		if not local_brain.is_busy() and mind.open_conversation(id):
+			local_brain.new_conversation_from(Remote.shown(mind.conversation(id)))
+			tabs.show_conversation(Remote.shown(mind.conversation(id)))
+		return
 	_tell_pc({"open": id})
 
 

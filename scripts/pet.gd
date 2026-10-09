@@ -408,6 +408,7 @@ func _update_stats() -> void:
 	if shown != tabs.stats.text:
 		tabs.stats.text = shown
 		stats_changed.emit(shown)
+	tabs.show_model(brain.is_ready(), brain.stopped)
 	# Nothing to type into until it is awake, and nothing to send while it is thinking.
 	bubble_input.editable = brain.is_ready()
 	send_button.disabled = not brain.is_ready() or is_thinking()
@@ -893,7 +894,9 @@ func _update_status() -> void:
 	status.visible = on or not brain.is_ready()
 	# The status stands in for the box, in the same row, so the answer keeps its room.
 	bubble_input.visible = not status.visible
-	if not brain.is_ready():
+	if brain.stopped:
+		status_label.text = brain.status
+	elif not brain.is_ready():
 		status_label.text = waking_text(brain.status, _waking_seconds)
 	else:
 		status_label.text = status_for(listener.mode, is_thinking(), voice.is_speaking() or duck.animation == &"talk")
@@ -953,6 +956,26 @@ func _take_notes() -> String:
 	var text: String = "\n\n(%s)" % "; ".join(_notes)
 	_notes.clear()
 	return text
+
+
+## The Stats tab's button, here or from the phone: stops the model to free its memory, with the
+## duck asleep until it is started again, or starts it.
+func set_model_running(run: bool) -> void:
+	if run:
+		_waking_seconds = 0
+		wake_clock.start()
+		brain.start_model()
+	else:
+		brain.stop_model()
+		listener.stop()
+		tabs.mic_button.set_pressed_no_signal(false)
+		if state == State.WALK or state == State.IDLE or state == State.DOCK:
+			state = State.SLEEP
+	_update_stats()
+
+
+func _on_model_toggled(run: bool) -> void:
+	set_model_running(run)
 
 
 func _on_name_saved(duck_name: String) -> void:
