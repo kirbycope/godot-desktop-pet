@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="Script" path="res://scripts/pet.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/duck.tscn" id="2"]
@@ -22,6 +22,60 @@
 [ext_resource type="Script" path="res://scripts/searcher.gd" id="15"]
 [ext_resource type="Script" path="res://scripts/chat_stream.gd" id="16"]
 [ext_resource type="Script" path="res://scripts/remote.gd" id="17"]
+[ext_resource type="Script" path="res://scripts/pomodoro.gd" id="18"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_length"]
+bg_color = Color(1, 1, 0.94, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.86, 0.6, 0.05, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 5.0
+content_margin_top = 4.0
+content_margin_right = 3.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_length_focus"]
+bg_color = Color(1, 1, 1, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.95, 0.5, 0, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 5.0
+content_margin_top = 4.0
+content_margin_right = 3.0
+content_margin_bottom = 4.0
+
+[sub_resource type="Theme" id="Theme_lengths"]
+HBoxContainer/constants/separation = 2
+Label/font_sizes/font_size = 13
+LineEdit/font_sizes/font_size = 13
+LineEdit/styles/focus = SubResource("StyleBoxFlat_length_focus")
+LineEdit/styles/normal = SubResource("StyleBoxFlat_length")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pomodoro_bg"]
+bg_color = Color(0.9, 0.9, 0.9, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pomodoro_fill"]
+bg_color = Color(0.82, 0.14, 0.07, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bubble"]
 bg_color = Color(1, 1, 1, 0.97)
@@ -133,6 +187,7 @@ Label/colors/font_color = Color(0.12, 0.14, 0.2, 1)
 LineEdit/colors/font_color = Color(0.12, 0.14, 0.2, 1)
 LineEdit/colors/font_placeholder_color = Color(0.45, 0.4, 0.3, 1)
 LineEdit/colors/caret_color = Color(0.12, 0.14, 0.2, 1)
+LineEdit/constants/minimum_character_width = 2
 LineEdit/font_sizes/font_size = 15
 LineEdit/styles/focus = SubResource("StyleBoxFlat_input_focus")
 LineEdit/styles/normal = SubResource("StyleBoxFlat_input")
@@ -143,6 +198,8 @@ ItemList/colors/font_selected_color = Color(0.12, 0.14, 0.2, 1)
 ItemList/styles/focus = SubResource("StyleBoxFlat_input")
 ItemList/styles/panel = SubResource("StyleBoxFlat_input")
 RichTextLabel/colors/default_color = Color(0.12, 0.14, 0.2, 1)
+TabContainer/constants/side_margin = 0
+TabContainer/font_sizes/font_size = 13
 TabContainer/styles/panel = SubResource("StyleBoxEmpty_tabs")
 TooltipLabel/colors/font_color = Color(0.12, 0.14, 0.2, 1)
 TooltipPanel/styles/panel = SubResource("StyleBoxFlat_input")
@@ -287,9 +344,9 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_bubble")
 
 [node name="Margin" type="MarginContainer" parent="Bubble/Panel"]
 layout_mode = 2
-theme_override_constants/margin_left = 12
+theme_override_constants/margin_left = 9
 theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 12
+theme_override_constants/margin_right = 9
 theme_override_constants/margin_bottom = 10
 
 [node name="Tabs" type="TabContainer" parent="Bubble/Panel/Margin"]
@@ -368,16 +425,112 @@ layout_mode = 2
 disabled = true
 text = "Send"
 
+[node name="Pomodoro" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
+visible = false
+layout_mode = 2
+script = ExtResource("18")
+metadata/_tab_index = 1
+
+[node name="Phase" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
+layout_mode = 2
+text = "Not running"
+horizontal_alignment = 1
+
+[node name="Time" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.72, 0.12, 0.06, 1)
+theme_override_font_sizes/font_size = 44
+text = "25:00"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Bar" type="ProgressBar" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_pomodoro_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_pomodoro_fill")
+max_value = 1.0
+show_percentage = false
+
+[node name="Buttons" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
+layout_mode = 2
+
+[node name="Start" type="Button" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Start the timer, or pause and resume it. Or just ask the duck: \"start a pomodoro\"."
+text = "Start"
+
+[node name="Skip" type="Button" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "End this focus or break now and go on to the next."
+disabled = true
+text = "Skip"
+
+[node name="Stop" type="Button" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Stop the timer; the duck stops being a tomato."
+disabled = true
+text = "Stop"
+
+[node name="Lengths" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
+layout_mode = 2
+theme = SubResource("Theme_lengths")
+
+[node name="FocusLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
+layout_mode = 2
+text = "Focus"
+
+[node name="Focus" type="SpinBox" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Minutes of focus in each round."
+min_value = 1.0
+max_value = 180.0
+value = 25.0
+
+[node name="ShortLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
+layout_mode = 2
+text = "Break"
+
+[node name="Short" type="SpinBox" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Minutes of the short break after each round."
+min_value = 1.0
+max_value = 60.0
+value = 5.0
+
+[node name="LongLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
+layout_mode = 2
+text = "Long"
+
+[node name="Long" type="SpinBox" parent="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Minutes of the long break after every fourth round."
+min_value = 1.0
+max_value = 90.0
+value = 15.0
+
+[node name="PhaseTimer" type="Timer" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
+one_shot = true
+
+[node name="Tick" type="Timer" parent="Bubble/Panel/Margin/Tabs/Pomodoro"]
+
 [node name="Stats" type="RichTextLabel" parent="Bubble/Panel/Margin/Tabs"]
 visible = false
 layout_mode = 2
 selection_enabled = true
-metadata/_tab_index = 1
+metadata/_tab_index = 2
 
 [node name="Settings" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
 visible = false
 layout_mode = 2
-metadata/_tab_index = 2
+metadata/_tab_index = 3
 
 [node name="VoiceLabel" type="Label" parent="Bubble/Panel/Margin/Tabs/Settings"]
 layout_mode = 2
@@ -431,7 +584,7 @@ text_overrun_behavior = 3
 [node name="Duck" type="VBoxContainer" parent="Bubble/Panel/Margin/Tabs"]
 visible = false
 layout_mode = 2
-metadata/_tab_index = 3
+metadata/_tab_index = 4
 
 [node name="NameRow" type="HBoxContainer" parent="Bubble/Panel/Margin/Tabs/Duck"]
 layout_mode = 2
@@ -548,3 +701,14 @@ item_0/id = 0
 [connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Duck/Buttons/Folder" to="." method="_on_folder_pressed"]
 [connection signal="toggled" from="Bubble/Panel/Margin/Tabs/Duck/HatRow/Hat" to="." method="_on_hat_toggled"]
 [connection signal="hat_changed" from="." to="Remote" method="_on_pet_hat_changed"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons/Start" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_start_pressed"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons/Skip" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_skip_pressed"]
+[connection signal="pressed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Buttons/Stop" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_stop_pressed"]
+[connection signal="value_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths/Focus" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_length_changed"]
+[connection signal="value_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths/Short" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_length_changed"]
+[connection signal="value_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro/Lengths/Long" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_length_changed"]
+[connection signal="timeout" from="Bubble/Panel/Margin/Tabs/Pomodoro/PhaseTimer" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_phase_timer_timeout"]
+[connection signal="timeout" from="Bubble/Panel/Margin/Tabs/Pomodoro/Tick" to="Bubble/Panel/Margin/Tabs/Pomodoro" method="_on_tick_timeout"]
+[connection signal="phase_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro" to="." method="_on_pomodoro_phase_changed"]
+[connection signal="time_up" from="Bubble/Panel/Margin/Tabs/Pomodoro" to="." method="_on_pomodoro_time_up"]
+[connection signal="phase_changed" from="Bubble/Panel/Margin/Tabs/Pomodoro" to="Remote" method="_on_pomodoro_phase_changed"]

@@ -106,6 +106,16 @@ func test_the_hat_button_puts_the_hat_on_and_follows_the_pc() -> void:
 	assert_false(button.button_pressed, "and the button shows it")
 
 
+func test_the_phone_duck_is_a_tomato_while_the_pc_timer_runs() -> void:
+	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
+	add_child_autofree(app)
+	assert_false(app.duck.tomato)
+	app._on_frame({"tomato": true})
+	assert_true(app.duck.tomato)
+	app._on_frame({"tomato": false})
+	assert_false(app.duck.tomato)
+
+
 func test_a_thrown_duck_bounces_off_the_sides_and_splashes_down() -> void:
 	var bounds: Rect2 = Rect2(-0.3, 0.0, 0.6, 0.4)
 	var off_the_side: Dictionary = RemoteApp.toss(Vector2(0.29, 0.2), Vector2(3.0, 0.0), bounds, 0.05, 5.0)

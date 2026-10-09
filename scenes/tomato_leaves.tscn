@@ -1,0 +1,80 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_leaf"]
+cull_mode = 2
+albedo_color = Color(0.25, 0.52, 0.14, 1)
+roughness = 0.6
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stem"]
+albedo_color = Color(0.2, 0.42, 0.11, 1)
+roughness = 0.7
+
+[sub_resource type="PrismMesh" id="PrismMesh_sepal"]
+material = SubResource("StandardMaterial3D_leaf")
+size = Vector3(0.022, 0.05, 0.003)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_stem"]
+material = SubResource("StandardMaterial3D_stem")
+top_radius = 0.0035
+bottom_radius = 0.005
+height = 0.024
+radial_segments = 8
+rings = 1
+
+[node name="TomatoLeaves" type="Node3D"]
+
+[node name="Stem" type="MeshInstance3D" parent="."]
+rotation_degrees = Vector3(0, 0, -14)
+position = Vector3(0, 0.01, 0)
+mesh = SubResource("CylinderMesh_stem")
+
+[node name="Sepal1" type="Node3D" parent="."]
+rotation_degrees = Vector3(32, 0, 0)
+
+[node name="Leaf" type="MeshInstance3D" parent="Sepal1"]
+rotation_degrees = Vector3(-90, 0, 0)
+position = Vector3(0, 0, -0.025)
+mesh = SubResource("PrismMesh_sepal")
+
+[node name="Sepal2" type="Node3D" parent="."]
+rotation_degrees = Vector3(4, 60, 0)
+scale = Vector3(0.85, 0.85, 0.85)
+
+[node name="Leaf" type="MeshInstance3D" parent="Sepal2"]
+rotation_degrees = Vector3(-90, 0, 0)
+position = Vector3(0, 0, -0.025)
+mesh = SubResource("PrismMesh_sepal")
+
+[node name="Sepal3" type="Node3D" parent="."]
+rotation_degrees = Vector3(32, 120, 0)
+
+[node name="Leaf" type="MeshInstance3D" parent="Sepal3"]
+rotation_degrees = Vector3(-90, 0, 0)
+position = Vector3(0, 0, -0.025)
+mesh = SubResource("PrismMesh_sepal")
+
+[node name="Sepal4" type="Node3D" parent="."]
+rotation_degrees = Vector3(4, 180, 0)
+scale = Vector3(0.85, 0.85, 0.85)
+
+[node name="Leaf" type="MeshInstance3D" parent="Sepal4"]
+rotation_degrees = Vector3(-90, 0, 0)
+position = Vector3(0, 0, -0.025)
+mesh = SubResource("PrismMesh_sepal")
+
+[node name="Sepal5" type="Node3D" parent="."]
+rotation_degrees = Vector3(32, 240, 0)
+
+[node name="Leaf" type="MeshInstance3D" parent="Sepal5"]
+rotation_degrees = Vector3(-90, 0, 0)
+position = Vector3(0, 0, -0.025)
+mesh = SubResource("PrismMesh_sepal")
+
+[node name="Sepal6" type="Node3D" parent="."]
+rotation_degrees = Vector3(4, 300, 0)
+scale = Vector3(0.85, 0.85, 0.85)
+
+[node name="Leaf" type="MeshInstance3D" parent="Sepal6"]
+rotation_degrees = Vector3(-90, 0, 0)
+position = Vector3(0, 0, -0.025)
+mesh = SubResource("PrismMesh_sepal")

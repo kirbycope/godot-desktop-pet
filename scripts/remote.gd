@@ -16,6 +16,7 @@ extends Node
 ##   PC: {"conversation": id, "messages": [...]} whenever the conversation under way changes
 ##   phone: {"mute": true|false}: muted, the PC makes no audio for it, which saves the synthesis time
 ##   phone: {"hat": true|false} puts the captain's hat on or off; PC: {"hat": bool} when it changes
+##   PC: {"tomato": bool} as the Pomodoro timer starts or stops, the duck a tomato while it runs
 ## Binary frames are audio: a kind byte, the sentence index as a little-endian uint32, then a WAV.
 ## The phone sends kind 1 (a sentence it heard, transcribed here); the PC sends kind 2 (a sentence
 ## spoken by Kokoro, for the phone to play).
@@ -231,6 +232,10 @@ func _on_pet_hat_changed(on: bool) -> void:
 	_broadcast({"hat": on})
 
 
+func _on_pomodoro_phase_changed(phase: Pomodoro.Phase) -> void:
+	_broadcast({"tomato": phase != Pomodoro.Phase.OFF})
+
+
 func _on_brain_status_changed(text: String) -> void:
 	_broadcast({"status": text, "ready": brain.is_ready()})
 
@@ -255,6 +260,7 @@ func welcome() -> Dictionary:
 		"welcome": mind.duck_name() if mind != null else "",
 		"conversation": mind.conversation_id() if mind != null else "",
 		"hat": pet != null and pet.duck != null and pet.duck.hat,
+		"tomato": pet != null and pet.duck != null and pet.duck.tomato,
 		"ready": brain != null and brain.is_ready(),
 		"status": brain.status if brain != null else "",
 		"speaks": speaks(),

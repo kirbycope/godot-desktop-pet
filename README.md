@@ -56,13 +56,15 @@ more; later loads take seconds.
 | Drag | dangles from the cursor; let go still moving and it keeps the mouse's speed, so it can be thrown: it spins, bounces off the screen's edges, gives one of five quick squeaks when thrown hard and on every hard hit, and slides to a stop on the bottom |
 | Right-click | opens the menu, with Quit |
 
-The bubble has three tabs:
+The bubble has five tabs:
 
 | Tab | Shows |
 | --- | --- |
 | Chat | the greeting or the latest answer, and the box to type in |
+| Pomodoro | the Pomodoro timer: the phase and round, the time left, Start (then Pause and Resume), Skip and Stop, and the focus, break and long-break lengths in minutes; see [Pomodoro timer](#pomodoro-timer) |
 | Stats | the brain's state (`Ready, thinking on the GPU.`), the NPU and GPU with their TOPS, the model, the voice, and how much the last look at the screen read (or why it failed) |
 | Settings | every text-to-speech voice the system offers. Test says a line in the selected one without changing anything; Apply makes it the duck's voice and saves it |
+| Duck | its name, its captain's hat, and what it remembers; see below |
 
 ## Its name, memories, personality and skills
 
@@ -223,6 +225,37 @@ them. Run it with:
 
 `DUCK_MODEL=<alias>` tries another model.
 
+## Pomodoro timer
+
+Ask for one, typed or spoken, and the duck becomes a tomato and keeps time: "start a pomodoro",
+"Ducky, can you start a 50 minute pomodoro?", "let's do a pomodoro of twenty-five minutes", "pause
+the pomodoro", "resume the pomodoro", "skip this pomodoro", "how long is left on the pomodoro?",
+"stop the pomodoro". "Tomato timer" and "focus timer" work as names too, and so do the ways
+speech-to-text spells it ("pomadoro"). These lines are answered on the spot, without the model, so
+they take no time. A line that only talks about it ("what do you think of the pomodoro technique?")
+still goes to the model.
+
+It runs the classic cycle: 25 minutes of focus, a 5 minute break, and after every fourth focus a
+15 minute break, round and round until stopped. When a phase runs out the duck squeaks, hops where
+it stands on the floor, and says what comes next ("Ding! That's a pomodoro done. Take a 5 minute
+break"); with the bubble open and the duck mid-answer, it says it after the answer.
+
+While the timer runs the duck stays out of the way: it glides to the top-right corner of the
+screen and sits there, facing in, instead of walking the edges. The corner is 40 px down, so it is
+below a maximised window's title bar and never over its close button. It is still a click away for
+anything else you want to ask, and the bubble opens under it there; started from the chat, the
+bubble glides along with it. Thrown or dropped, it glides back once it has landed, and when the
+timer stops it drops to the floor and walks again.
+
+While the timer runs the duck is a tomato: red all over with a red-orange beak, its eyes as they
+were, and a crown of six green sepals and a stem on its head (`scenes/tomato_leaves.tscn`, built from
+Godot's own prism and cylinder meshes). The leaves take the captain's hat's place, and the hat comes
+back when the timer stops. The phone's duck turns into a tomato too.
+
+The **Pomodoro** tab shows the phase and round (`Focus, round 2 of 4`), the time left and a bar,
+with Start, which becomes Pause and Resume, Skip and Stop. The three lengths below them are kept in
+`user://settings.cfg`; a length asked for aloud is for that one round.
+
 ## Searching the web
 
 Ask it to look something up and it searches DuckDuckGo first: "search for ...", "look up ...",
@@ -354,6 +387,8 @@ the desk, "why does this crash?" reads your editor.
   at once; the choice is kept in
   `user://settings.cfg`. It is `scenes/hat.tscn`, the model with its four PBR textures as one
   material, sitting on the duck's head and turning with it.
+- **The tomato**: while the [Pomodoro timer](#pomodoro-timer) runs on the PC, the phone's duck is a
+  tomato as well. Asking for one from the phone works the same as at the PC.
 - **The duck** sleeps until the PC's brain is awake, thinks while it waits, talks while it speaks,
   and squeezes and squeaks on every tap.
 - **Away from home**, put the PC and the phone on [Tailscale](https://tailscale.com) and type the
@@ -381,6 +416,7 @@ sentence's index as a little-endian uint32, then a WAV.
 | PC | `{"sentence": text, "index": n}`, then audio kind 2 for `n` | each sentence as it is written, then its Kokoro audio |
 | PC | `{"replied": text, "notes": ...}` | the whole answer and what the duck remembered |
 | PC | `{"status": text, "ready": bool}`, `{"busy": true}` | the brain waking; a turn already under way |
+| PC | `{"tomato": bool}` | the Pomodoro timer started or stopped; `welcome` carries it too |
 | phone | `{"ping": t}` every 5 s | answered `{"pong": t}`; three missed and the phone reconnects |
 
 The phone app is `scenes/remote.tscn` with `scripts/remote_app.gd`, in this same project. Android
@@ -615,6 +651,10 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Pet` | `greetings` | ten canned greetings, one picked at random on each click |
 | `Pet` | `test_line` | what the Test button says |
 | `Duck` | `turn_to_camera`, `turn_speed` | 30 degrees three-quarters on while walking; 10, how quickly it turns |
+| `Duck` | `tomato_skin`, `tomato_beak` | the tomato's red body and red-orange beak, materials in `duck.tscn` |
+| `Pet` | `leaf_reach` | 26 px: how far above the head the part that takes the mouse reaches while it is a tomato, so the leaves are drawn |
+| `Pet` | `dock_margin`, `dock_seconds` | 8 px from the right and 40 px from the top: where the duck sits while the timer runs; 0.9 s to glide there |
+| `Pomodoro` | `rounds` | 4 focus rounds before the long break; the lengths themselves are on the tab |
 | `Brain` | `preferences` | `resources/model_preferences.tres`: the ranked model lists and `memory_share` |
 | `Brain` | `model_alias` | empty, so the model is chosen for the machine; set it to force one |
 | `Brain` | `port` | 39839 |
@@ -639,8 +679,10 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 
 ```
 scenes/pet.tscn             the pet window: the duck's viewport, Brain, Voice, ScreenReader, and the Bubble with its tabs
-scenes/duck.tscn            the 3D duck, its camera and lights, and its optional hat
+scenes/duck.tscn            the 3D duck, its camera and lights, its optional hat, and its tomato colours and leaves
 scenes/hat.tscn             the captain's hat with its material
+scenes/tomato_leaves.tscn   the tomato's green sepals and stem, from Godot's own meshes
+scripts/pomodoro.gd         the Pomodoro tab: the timer, its rounds, and what a line asks of it
 assets/hat/                 the captain's hat model and textures
 scripts/pet.gd              edge walking, dragging, the bubble, greetings, stats and voice settings
 scripts/duck.gd             the duck's poses and animations
@@ -703,7 +745,8 @@ handling of Foundry Local's responses and of the screen text; the streamed reply
 sentence checks and the slim debugging prompt; the code checks and the error-first screen text;
 Kokoro's sentence queue; the phone link's frames, pairing and beacon, a real WebSocket over
 loopback, and the phone app's scene and Android settings; and choosing, saving and falling back
-between voices. They do not need Foundry Local installed, and headless Godot has no text-to-speech
+between voices; the Pomodoro timer's spoken requests, its rounds and its tab, and the tomato duck.
+They do not need Foundry Local installed, and headless Godot has no text-to-speech
 or screen, so they also show those missing stays quiet rather than failing.
 
 Things found the hard way:

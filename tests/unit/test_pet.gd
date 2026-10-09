@@ -90,7 +90,7 @@ func test_bubble_has_chat_stats_and_settings_tabs() -> void:
 	var titles: PackedStringArray = PackedStringArray()
 	for i: int in tabs.get_tab_count():
 		titles.append(tabs.get_tab_title(i))
-	assert_eq(titles, PackedStringArray(["Chat", "Stats", "Settings", "Duck"]))
+	assert_eq(titles, PackedStringArray(["Chat", "Pomodoro", "Stats", "Settings", "Duck"]))
 	assert_not_null(pet.get_node("Bubble/Panel/Margin/Tabs/Settings/Voices") as OptionButton)
 	pet.free()
 
@@ -272,6 +272,30 @@ func test_it_sleeps_until_its_brain_is_ready() -> void:
 	assert_eq(Pet.settle_state(Pet.State.CHAT, false), Pet.State.CHAT, "a click still opens the bubble")
 	assert_eq(Pet.settle_state(Pet.State.DRAG, false), Pet.State.DRAG, "a sleeping duck can still be picked up")
 	assert_eq(Pet.settle_state(Pet.State.WALK, true), Pet.State.WALK)
+
+
+func test_while_the_timer_runs_it_goes_back_to_its_dock_rather_than_walking() -> void:
+	assert_eq(Pet.settle_state(Pet.State.WALK, true, true), Pet.State.DOCK, "after the chat, a landing or waking up")
+	assert_eq(Pet.settle_state(Pet.State.CHAT, true, true), Pet.State.CHAT, "a click still opens the chat")
+	assert_eq(Pet.settle_state(Pet.State.DRAG, true, true), Pet.State.DRAG, "and it can still be picked up")
+	assert_eq(Pet.settle_state(Pet.State.WALK, false, true), Pet.State.SLEEP, "asleep until its brain is ready")
+	assert_eq(Pet.settle_state(Pet.State.WALK, true, false, true), Pet.State.FALL, "stopped while docked, it drops to the floor")
+
+
+func test_the_dock_is_the_top_right_corner_leaves_and_all() -> void:
+	var area: Rect2 = Rect2(0, 0, 1920, 1152)
+	var at: Vector2 = Pet.dock_position(area, Vector2(176, 176), Vector2(124, 108), Vector2(0, 32), 26.0, Vector2(8, 40))
+	assert_eq(at, Vector2(1762, 0))
+	# The part that takes the mouse: 8 px in from the right and, with the leaves, 40 px down from
+	# the top, below a maximised window's close button.
+	var outline: PackedVector2Array = Pet.hit_outline(Vector2(176, 176), Vector2(124, 108), Vector2(0, 32), 0.0, 26.0)
+	var bounds: Rect2 = Rect2(outline[0], Vector2.ZERO)
+	for point: Vector2 in outline:
+		bounds = bounds.expand(point)
+	assert_almost_eq(at.x + bounds.end.x, area.end.x - 8.0, 0.5)
+	assert_almost_eq(at.y + bounds.position.y, area.position.y + 40.0, 0.5)
+	var lower: Rect2 = Rect2(0, 25, 1440, 875)
+	assert_eq(Pet.dock_position(lower, Vector2(176, 176), Vector2(124, 108), Vector2(0, 32), 26.0, Vector2(8, 40)), Vector2(1282, 25), "below a menu bar")
 
 
 func test_the_warm_up_line_says_what_it_is_doing_and_how_long() -> void:

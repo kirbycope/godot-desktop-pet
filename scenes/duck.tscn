@@ -1,8 +1,17 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/duck.gd" id="1"]
 [ext_resource type="PackedScene" path="res://assets/duck/rubber_duck.fbx" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/hat.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/tomato_leaves.tscn" id="4"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tomato_skin"]
+albedo_color = Color(0.78, 0.09, 0.05, 1)
+roughness = 0.25
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tomato_beak"]
+albedo_color = Color(0.88, 0.17, 0.07, 1)
+roughness = 0.3
 
 [sub_resource type="Environment" id="Environment_duck"]
 background_mode = 1
@@ -12,6 +21,8 @@ ambient_light_energy = 0.7
 
 [node name="Duck" type="Node3D"]
 script = ExtResource("1")
+tomato_skin = SubResource("StandardMaterial3D_tomato_skin")
+tomato_beak = SubResource("StandardMaterial3D_tomato_beak")
 
 [node name="Pivot" type="Node3D" parent="."]
 position = Vector3(0, 0.037778, 0)
@@ -27,6 +38,10 @@ transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, 0, 0, 0)
 [node name="Hat" parent="Pivot/Body/Yaw" instance=ExtResource("3")]
 visible = false
 transform = Transform3D(-3.809167e-09, 5.3534355e-10, 0.088, 0.012247234, 0.087143585, 0, -0.087143585, 0.012247234, -3.846602e-09, 0.008, 0.207, 0)
+
+[node name="Leaves" parent="Pivot/Body/Yaw" instance=ExtResource("4")]
+visible = false
+position = Vector3(0.008, 0.218, 0)
 
 [node name="Zzz" type="Node3D" parent="."]
 

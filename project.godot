@@ -13,14 +13,10 @@ config_version=5
 config/name="Desktop Pet"
 config/description="A robot that walks the edges of the screen and chats through a local LLM on the NPU, GPU or CPU."
 run/main_scene="res://scenes/pet.tscn"
-run/main_scene.android="res://scenes/remote.tscn"
-run/low_processor_mode.android=true
 config/features=PackedStringArray("4.8", "GL Compatibility")
 config/icon="res://assets/icons/duck_icon.png"
-
-[input_devices]
-
-sensors/enable_accelerometer=true
+run/main_scene.android="res://scenes/remote.tscn"
+run/low_processor_mode.android=true
 
 [audio]
 
@@ -51,10 +47,14 @@ window/handheld/orientation.android=1
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/kept_model/plugin.cfg")
 
+[input_devices]
+
+sensors/enable_accelerometer=true
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
 viewport/transparent_background=true
 viewport/transparent_background.android=false
-textures/vram_compression/import_etc2_astc=true

@@ -17,6 +17,9 @@ const VIEWER_YAW: float = -90.0
 ## or hop; the pivot it rolls about is the view's centre, 0.0378 m above the model's origin.
 const BASE: Vector3 = Vector3(0.0, -0.205778, 0.0)
 
+## The tomato's colours, in place of the model's yellow body (surface 0) and orange beak (surface 1).
+@export var tomato_skin: Material
+@export var tomato_beak: Material
 ## Degrees the duck turns towards the camera, so it is seen three-quarters on rather than in profile.
 @export_range(0.0, 90.0) var turn_to_camera: float = 30.0
 ## How quickly it turns, to look at you or to walk the other way; higher is quicker.
@@ -42,7 +45,14 @@ var hat: bool = false:
 	set(value):
 		hat = value
 		if is_node_ready():
-			hat_node.visible = value
+			_dress()
+## A tomato, while the Pomodoro timer runs: red all over, with green leaves on its head
+## (scenes/tomato_leaves.tscn) where the hat would be. The eyes stay as they are.
+var tomato: bool = false:
+	set(value):
+		tomato = value
+		if is_node_ready():
+			_dress()
 var _time: float = 0.0
 var _perk_time: float = INF
 
@@ -50,13 +60,23 @@ var _perk_time: float = INF
 @onready var body: Node3D = $Pivot/Body
 @onready var yaw: Node3D = $Pivot/Body/Yaw
 @onready var hat_node: Node3D = $Pivot/Body/Yaw/Hat
+@onready var leaves: Node3D = $Pivot/Body/Yaw/Leaves
+@onready var model_mesh: MeshInstance3D = $"Pivot/Body/Yaw/Model/Rubber Duck"
 @onready var zzz: Array[Label3D] = [$Zzz/Z1, $Zzz/Z2, $Zzz/Z3]
 
 
 func _ready() -> void:
 	yaw.rotation_degrees.y = target_yaw()
 	pivot.rotation_degrees.z = roll
-	hat_node.visible = hat
+	_dress()
+
+
+## The hat, or the tomato's leaves and colours in its place.
+func _dress() -> void:
+	hat_node.visible = hat and not tomato
+	leaves.visible = tomato
+	model_mesh.set_surface_override_material(0, tomato_skin if tomato else null)
+	model_mesh.set_surface_override_material(1, tomato_beak if tomato else null)
 
 
 func _process(delta: float) -> void:

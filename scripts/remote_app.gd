@@ -251,9 +251,13 @@ func _on_frame(frame: Dictionary) -> void:
 		_speaks = frame.get("speaks", false)
 		_show_conversation(frame.get("recent", []))
 		_show_hat(bool(frame.get("hat", false)))
+		duck.tomato = bool(frame.get("tomato", false))
 		_set_awake(frame.get("ready", false), str(frame.get("status", "")))
 	elif frame.has("hat") and frame.size() == 1:
 		_show_hat(bool(frame["hat"]))
+	elif frame.has("tomato") and frame.size() == 1:
+		# A tomato while the Pomodoro timer runs on the PC.
+		duck.tomato = bool(frame["tomato"])
 	elif frame.has("conversations"):
 		history_list.clear()
 		for found_one: Variant in frame["conversations"]:

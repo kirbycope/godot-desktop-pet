@@ -9,7 +9,9 @@ extends Node2D
 ## which moves the window rather than a sprite.
 
 enum Edge { BOTTOM, RIGHT, TOP, LEFT }
-enum State { WALK, IDLE, DRAG, FALL, CHAT, SLEEP }
+## DOCK: sitting still in the top-right corner while the Pomodoro timer runs, out of the way but
+## still a click away for the chat.
+enum State { WALK, IDLE, DRAG, FALL, CHAT, SLEEP, DOCK }
 
 ## A line is on its way to the brain, typed, spoken or from the phone.
 signal turn_started(line: String)
@@ -46,6 +48,13 @@ signal hat_changed(on: bool)
 ## nothing outside that part is drawn either, so it has to cover the hat however far the duck
 ## stretches: 60 px takes it to 6 px from the window's top, past the crown of a falling duck at 11.
 @export var hat_reach: float = 60.0
+## The same for the tomato's leaves, which stand lower than the hat.
+@export var leaf_reach: float = 26.0
+## Pixels between the docked duck (leaves and all) and the corner's right and top edges. The top one
+## clears a maximised window's title bar, so its close button is not under the duck.
+@export var dock_margin: Vector2 = Vector2(8, 40)
+## How long the duck takes to glide to its dock.
+@export var dock_seconds: float = 0.9
 ## Said aloud and shown when the bubble opens; one is picked at random each time.
 @export var greetings: Array[String] = [
 	"Quack! Hi there!", "Oh, hello! How's it going?", "Hi! What's up?", "Quack quack! Good to see you.",
@@ -103,6 +112,10 @@ var _notes: Array[String] = []
 ## The answer being spoken, and the tween that scrolls it along.
 var _spoken: String = ""
 var _scroll_tween: Tween
+## Whether its place is the dock rather than the edges: while the Pomodoro timer runs.
+var _docked: bool = false
+## The glide to the dock.
+var _glide: Tween
 
 @onready var duck: Duck = $View/Viewport/Duck
 @onready var idle_timer: Timer = $IdleTimer
@@ -136,6 +149,7 @@ var _scroll_tween: Tween
 @onready var name_field: LineEdit = $Bubble/Panel/Margin/Tabs/Duck/NameRow/Name
 @onready var memory_list: ItemList = $Bubble/Panel/Margin/Tabs/Duck/Memories
 @onready var hat_box: CheckBox = $Bubble/Panel/Margin/Tabs/Duck/HatRow/Hat
+@onready var pomodoro: Pomodoro = $Bubble/Panel/Margin/Tabs/Pomodoro
 @onready var menu: PopupMenu = $Menu
 
 
@@ -267,15 +281,17 @@ func _stand_on(on_edge: Edge) -> void:
 
 
 func _update_passthrough() -> void:
-	var reach: float = hat_reach if duck.hat else 0.0
+	var reach: float = reach_for(duck.hat, duck.tomato, hat_reach, leaf_reach)
 	DisplayServer.window_set_mouse_passthrough(hit_outline(window_size(), hit_size, hit_offset, duck.roll, reach))
 
 
 func _set_state(value: State) -> void:
 	var was: State = state
-	state = settle_state(value, brain != null and brain.is_ready())
+	state = settle_state(value, brain != null and brain.is_ready(), _docked, is_inside_tree() and _stranded())
 	if not is_node_ready():
 		return
+	if _glide != null and (state == State.DRAG or state == State.FALL):
+		_glide.kill()
 	match state:
 		State.SLEEP:
 			_stand_on(Edge.BOTTOM)
@@ -297,6 +313,11 @@ func _set_state(value: State) -> void:
 		State.CHAT:
 			duck.looking_at_viewer = true
 			_open_bubble()
+		State.DOCK:
+			edge = Edge.BOTTOM
+			_stand_on(Edge.BOTTOM)
+			duck.facing = -1
+			_glide_to(dock_position(usable_area(), window_size(), hit_size, hit_offset, reach_for(duck.hat, duck.tomato, hat_reach, leaf_reach), dock_margin))
 	if was == State.CHAT and state != State.CHAT:
 		duck.looking_at_viewer = false
 		_greeting = ""
@@ -320,15 +341,53 @@ func _open_bubble() -> void:
 		bubble_text.text = _greeting
 		duck.play(&"squeeze")
 		squeak.play()
+	_place_bubble()
+	bubble.show()
+	bubble.grab_focus()
+	bubble_input.grab_focus()
+
+
+## Over the duck, or under it where there is no room above, as in the dock.
+func _place_bubble() -> void:
 	var area: Rect2 = usable_area()
 	var size: Vector2 = Vector2(bubble.size)
 	var above: float = screen_position.y + headroom - size.y
 	var at: Vector2 = Vector2(screen_position.x + (window_size().x - size.x) / 2.0, above if above >= area.position.y else screen_position.y + window_size().y)
 	at.x = clampf(at.x, area.position.x, area.end.x - size.x)
 	bubble.position = Vector2i(at.round())
-	bubble.show()
-	bubble.grab_focus()
-	bubble_input.grab_focus()
+
+
+## Glides the window to `target`, or settles at once when it is there already. A bubble open
+## comes along.
+func _glide_to(target: Vector2) -> void:
+	if _glide != null:
+		_glide.kill()
+	if screen_position.distance_to(target) < 1.0:
+		_on_glide_finished()
+		return
+	if state != State.CHAT:
+		duck.play(&"fall")
+	_glide = create_tween()
+	_glide.tween_method(_glide_step.bind(screen_position, target), 0.0, 1.0, dock_seconds).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_glide.tween_callback(_on_glide_finished)
+
+
+func _glide_step(t: float, from: Vector2, to: Vector2) -> void:
+	screen_position = from.lerp(to, t)
+	_apply_position()
+	if state == State.CHAT:
+		_place_bubble()
+
+
+func _on_glide_finished() -> void:
+	if state == State.DOCK:
+		duck.play(&"land")
+		idle_timer.start(0.6)
+
+
+## Standing on the bottom edge but up off the floor, as it is when the timer stops in the dock.
+func _stranded() -> bool:
+	return edge == Edge.BOTTOM and screen_position.y < usable_area().end.y - window_size().y - 1.0
 
 
 ## Speaks `text` and quacks along while it does; with no voice, a short quack then idle.
@@ -471,6 +530,8 @@ func _selected_voice() -> String:
 func _on_idle_timer_timeout() -> void:
 	if state == State.IDLE:
 		state = State.WALK
+	elif state == State.DOCK:
+		duck.play(&"idle")
 
 
 func _on_voice_started() -> void:
@@ -650,6 +711,11 @@ func _on_input_text_submitted(text: String) -> void:
 func _send(line: String) -> void:
 	if not brain.is_ready():
 		return
+	# "Start a pomodoro", "pause the pomodoro": the timer's, answered here without the model.
+	var request: Dictionary = Pomodoro.request_in(line)
+	if not request.is_empty():
+		_answer_here(line, pomodoro.carry_out(request))
+		return
 	_pending_line = line
 	turn_started.emit(line)
 	# "Your name is ...", "remember that ...": done now, so the answer already knows. After the line
@@ -671,6 +737,65 @@ func _send(line: String) -> void:
 		bubble_text.text = "You: %s\n\nLooking at your screen..." % line
 		_look_or_reuse()
 	_update_stats()
+
+
+## A line the duck answers itself, such as one for the Pomodoro timer: no screen, no model.
+func _answer_here(line: String, text: String) -> void:
+	turn_started.emit(line)
+	_last_line = line
+	_greeting = ""
+	squeak.stop()
+	bubble_text.text = "You: %s\n\n%s" % [line, text]
+	bubble_text.scroll_to_line(0)
+	answered.emit(text, "")
+	if _quiet:
+		_quiet = false
+		_done_talking()
+	elif state == State.CHAT:
+		_say(text)
+	_update_stats()
+
+
+## The duck is a tomato while the Pomodoro timer runs, docked in the top-right corner; when it
+## stops, the duck drops from there and goes back to walking.
+func _on_pomodoro_phase_changed(phase: Pomodoro.Phase) -> void:
+	var running: bool = phase != Pomodoro.Phase.OFF
+	duck.tomato = running
+	_update_passthrough()
+	if running == _docked:
+		return
+	_docked = running
+	if running:
+		if state == State.CHAT:
+			_glide_to(dock_position(usable_area(), window_size(), hit_size, hit_offset, reach_for(duck.hat, duck.tomato, hat_reach, leaf_reach), dock_margin))
+		elif state == State.WALK or state == State.IDLE:
+			state = State.DOCK
+	elif state == State.DOCK:
+		velocity = Vector2.ZERO
+		_spin = 0.0
+		state = State.FALL
+
+
+## Time is up on a focus or a break: a squeak, a hop where it can, and the news said aloud, after
+## whatever it is saying now.
+func _on_pomodoro_time_up(next: Pomodoro.Phase) -> void:
+	var text: String = Pomodoro.announcement(next, pomodoro.minutes_for(next), pomodoro.finished, pomodoro.rounds)
+	squeak.play()
+	if state == State.CHAT:
+		if is_thinking() or voice.is_speaking():
+			voice.add(text)
+		else:
+			bubble_text.text = text
+			_say(text)
+		return
+	if state == State.DOCK:
+		duck.play(&"cheer")
+		idle_timer.start(Duck.HOP_SECONDS * 3.0)
+	elif state == State.IDLE or (state == State.WALK and edge == Edge.BOTTOM):
+		state = State.IDLE
+		duck.play(&"cheer")
+		idle_timer.start(Duck.HOP_SECONDS * 3.0)
+	voice.speak(text)
 
 
 func _on_searcher_searched(results: Array[Dictionary]) -> void:
@@ -944,6 +1069,14 @@ static func is_click(pressed_at: Vector2, released_at: Vector2, slop: float) -> 
 	return pressed_at.distance_to(released_at) <= slop
 
 
+## How much higher than the duck's head the part that takes the mouse reaches: the tomato's leaves
+## take the hat's place, so they decide it while it is a tomato.
+static func reach_for(hat: bool, tomato: bool, hat_height: float, leaf_height: float) -> float:
+	if tomato:
+		return leaf_height
+	return hat_height if hat else 0.0
+
+
 ## The window-space outline that takes the mouse, turned with a duck rolled `roll` degrees.
 ## 3D roll is anticlockwise on screen and 2D rotation clockwise, hence the minus.
 static func hit_outline(window: Vector2, size: Vector2, offset: Vector2, roll: float, reach: float = 0.0) -> PackedVector2Array:
@@ -1043,10 +1176,26 @@ static func placeholder_for(mode: Listener.Mode, ready: bool) -> String:
 
 
 ## Walking and resting wait until the brain is ready: until then the duck sleeps.
-static func settle_state(requested: State, ready: bool) -> State:
+## Sleeping until its brain is ready; back to the dock rather than walking while `docked`; and
+## dropping to the floor rather than walking in mid-air when it is `stranded` there by a timer
+## stopped while it was docked.
+static func settle_state(requested: State, ready: bool, docked: bool = false, stranded: bool = false) -> State:
 	if not ready and (requested == State.WALK or requested == State.IDLE):
 		return State.SLEEP
+	if requested == State.WALK and docked:
+		return State.DOCK
+	if requested == State.WALK and stranded:
+		return State.FALL
 	return requested
+
+
+## Where the window goes to dock the duck in the top-right corner of `area`: the part that takes
+## the mouse, leaves or hat included (`reach`), `margin.x` in from the right edge and `margin.y`
+## down from the top. The window's empty edges may hang off the screen.
+static func dock_position(area: Rect2, window: Vector2, size: Vector2, offset: Vector2, reach: float, margin: Vector2) -> Vector2:
+	var right: float = window.x / 2.0 + offset.x + size.x / 2.0
+	var top: float = window.y / 2.0 + offset.y - size.y / 2.0 - reach
+	return Vector2(area.end.x - margin.x - right, area.position.y + margin.y - top)
 
 
 ## The warm-up line: how long and what the brain is doing, "Waking up, 23 s: Loading ...". The
