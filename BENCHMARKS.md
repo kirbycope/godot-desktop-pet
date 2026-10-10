@@ -160,8 +160,9 @@ own repeat filter, leaving its stand-in line ("Ooh, I've lost my thread! Tell me
 ### What it shows
 
 - **The 0.5B and 1.5B models are no use to the duck on any backend**, Qwen or Coder, however fast:
-  the duck's prompt is too much for them. Phi-4-mini mostly holds together but answers as "You:"
-  on CUDA and the CPU.
+  the duck's prompt is too much for them, or for Foundry's builds of them: the Mac run below found
+  the same 1.5B and Phi-4-mini sound on llama.cpp. Phi-4-mini mostly holds together but answers as
+  "You:" on CUDA and the CPU.
 - **From 7B up, every answer is sound**, and on the GPU every backend gives the same quality.
 - **The 7B on CUDA is the quick all-rounder**: ready 13.5 s after its download, its first answer in
   2.1 s and the next ones in about 1.6 s. TensorRT-RTX answers no faster but takes 50 s to start,
@@ -174,6 +175,67 @@ own repeat filter, leaving its stand-in line ("Ooh, I've lost my thread! Tell me
   for CUDA or WebGPU.
 - **The CPU is out of the question for the duck**: 30 s an answer for a 7B, over a minute for a 14B.
 - Downloads ran at 50 to 70 MB/s, so the 9 GB 14B builds took two to three minutes.
+
+## 2026-10-09, MacBook Pro (M4 Pro)
+
+| | |
+| --- | --- |
+| Machine | MacBook Pro (Mac16,7), Apple M4 Pro, 24 GB, macOS 26.6.2 |
+| Conditions | On its charger, kept awake with `caffeinate`, the Mac duck closed |
+| Engines | Foundry Local 0.10.3 (WebGPU on the GPU, and the CPU) and llama.cpp's llama-server (build 11429, Metal), with Q4_K_M GGUFs by bartowski |
+| Run | `2026-10-09-213313`, raw lines in [benchmarks/2026-10-09_mac-m4-pro.jsonl](benchmarks/2026-10-09_mac-m4-pro.jsonl) |
+
+The same run as the PC's, through the Mac duck's own brain: every Foundry build of the models the
+Mac duck can choose (`mac_chat` in `scripts/model_preferences.gd`, which leaves out Foundry's
+Qwen 2.5 14B), and each GGUF the Mac duck runs on llama-server (`Brain.llama_models`), which
+llama-server downloads itself, into the Hugging Face cache, cleared between setups like Foundry's.
+For those, "Download" runs until llama-server starts loading, and "Warm-up" from there to ready:
+llama-server maps the file into memory, so its load takes about a second. The Mac has no GPU sensor
+to read without root, so its lines carry macOS's CPU speed limit instead, which stayed at 100 (no
+throttling) throughout. "Memory" is Foundry's for a Foundry build and llama-server's for a GGUF;
+what Foundry's WebGPU builds hold on the GPU does not show in its process's count, so theirs read
+low.
+
+| Setup | Download | Warm-up | First answer: word / whole | Later: word / whole | Tokens/s | Memory | Text |
+| --- | --- | ---: | --- | --- | ---: | ---: | --- |
+| Phi-4-mini, Foundry WebGPU | 3,809 MB in 355 s | 10.9 s | 2.9 / 4.7 s | 2.8 / 5.1 s | 65 | 1.1 GB | odd, then the duck's stand-in line |
+| **Phi-4-mini, llama.cpp** | 2,491 MB in 52 s | 1.1 s | 1.9 / 2.7 s | 0.6 / 1.7 s | 70 | 4.7 GB | fine |
+| Qwen 2.5 0.5B, Foundry WebGPU | 700 MB in 110 s | 5.4 s | 0.9 / 1.4 s | 0.7 / 0.8 s | 200 | 1.8 GB | broken |
+| Qwen 2.5 0.5B, Foundry CPU | 822 MB in 126 s | 4.9 s | 1.1 / 1.4 s | 1.3 / 1.4 s | 223 | 5.6 GB | broken |
+| Qwen 2.5 0.5B, llama.cpp | 397 MB in 15 s | 1.1 s | 0.3 / 0.5 s | 0.1 / 0.3 s | 231 | 0.7 GB | sensible, but not the duck |
+| Qwen 2.5 1.5B, Foundry WebGPU | 1,546 MB in 187 s | 5.4 s | 1.2 / 1.4 s | 1.1 / 1.3 s | 116 | 2.5 GB | broken |
+| Qwen 2.5 1.5B, Foundry CPU | 1,822 MB in 160 s | 5.4 s | 3.1 / 3.4 s | 3.3 / 4.0 s | 98 | 6.1 GB | broken |
+| **Qwen 2.5 1.5B, llama.cpp** | 986 MB in 25 s | 0.1 s | 0.9 / 1.4 s | 0.2 / 1.0 s | 146 | 1.6 GB | fine |
+| Qwen 2.5 7B, Foundry WebGPU | 5,324 MB in 522 s | 9.4 s | 4.5 / 6.1 s | 4.8 / 6.7 s | 44 | 1.8 GB | fine |
+| Qwen 2.5 7B, Foundry CPU | 6,307 MB in 433 s | 7.4 s | 12.4 / 16.6 s | 13.9 / 16.0 s | 36 | 7.1 GB | fine, but slow |
+| **Qwen 2.5 7B, llama.cpp** (the Mac duck's own) | 4,683 MB in 87 s | 0.1 s | 3.6 / 4.6 s | 1.0 / 2.2 s | 48 | 5.6 GB | fine |
+| Qwen 2.5 14B, llama.cpp | 8,988 MB in 161 s | 0.1 s | 7.3 / 10.2 s | 2.2 / 5.2 s | 25 | 12.0 GB | fine |
+| Qwen 2.5 Coder 0.5B, Foundry WebGPU | 528 MB in 112 s | 5.9 s | 0.7 / 0.8 s | 0.7 / 1.0 s | 192 | 1.8 GB | broken |
+| Qwen 2.5 Coder 0.5B, Foundry CPU | 822 MB in 150 s | 5.4 s | 1.1 / 1.8 s | 1.4 / 2.0 s | 231 | 5.8 GB | broken |
+| Qwen 2.5 Coder 1.5B, Foundry WebGPU | 1,280 MB in 133 s | 5.9 s | 1.1 / 2.4 s | 1.2 / 1.3 s | 115 | 2.5 GB | broken |
+| Qwen 2.5 Coder 1.5B, Foundry CPU | 1,822 MB in 196 s | 6.9 s | 3.0 / 3.4 s | 3.2 / 3.4 s | 96 | 6.1 GB | broken |
+| Qwen 2.5 Coder 7B, Foundry WebGPU | 4,843 MB in 368 s | 7.4 s | 4.3 / 5.3 s | 4.7 / 6.0 s | 44 | 6.1 GB | fine, terse |
+| Qwen 2.5 Coder 7B, Foundry CPU | 6,307 MB in 514 s | 7.9 s | 12.5 / 14.4 s | 13.4 / 14.9 s | 37 | 7.1 GB | fine, terse |
+| Qwen 2.5 Coder 14B, Foundry WebGPU | 9,000 MB in 581 s | 23.5 s | 9.1 / 12.1 s | 10.4 / 14.9 s | 22 | 1.4 GB | fine, but slow |
+| Qwen 2.5 Coder 14B, Foundry CPU | 11,325 MB in 720 s | 17.5 s | 26.5 / 31.4 s | 28.3 / 33.8 s | 14 | 9.4 GB | fine, but slow |
+
+### What it shows
+
+- **On the Mac, llama.cpp is the engine for the duck, as it already uses.** Foundry reads the duck's
+  whole prompt again every turn, so its warmed-up answers are no quicker than its first (Qwen 2.5 7B:
+  about 6.5 s every time on WebGPU), while llama-server keeps what it has read and answers the same
+  model's later lines in about 2 s. The Mac duck's own pick, Qwen 2.5 7B on llama.cpp, stays.
+- **llama.cpp's builds of the small models make sense where Foundry's do not.** Qwen 2.5 1.5B on
+  llama.cpp answers in character ("Let's check where you're starting your loop") in about a second,
+  and Phi-4-mini there is sound and has no "You:", while both, on Foundry, on the Mac as on the PC,
+  echo the question or fall back to the duck's stand-in line. So the PC's "broken" small models are
+  as much Foundry's builds of them, or how Foundry applies their chat template, as their size.
+- **Phi-4-mini on llama.cpp is the quickest sound setup on the Mac**: 2.7 s for its first answer and
+  1.7 s for the next, against the 7B's 4.6 and 2.2, in a little less memory.
+- **The 14B on llama.cpp takes 12 GB of the Mac's 24**, and 5 s an answer once warm: usable, but
+  half the speed of the 7B.
+- **Foundry's downloads were slow on the Mac**, 5 to 15 MB/s against 50 to 75 from Hugging Face
+  for llama.cpp's GGUFs on the same network, so a Foundry 14B took ten minutes to arrive.
 
 ## Running it again
 
@@ -197,5 +259,13 @@ again on its next start; speech models are left alone):
 python tools/llm_report.py "$env:APPDATA\Godot\app_userdata\Desktop Pet\pc_llm_metrics.jsonl"
 ```
 
-`DUCK_BENCH_BUILDS` (comma-separated build names) tries only those. Every answer is in the metrics
+`DUCK_BENCH_BUILDS` (comma-separated build names; `llama-<alias>` for a GGUF on a Mac) tries only
+those. On a Mac, run it over SSH detached and kept awake, as it takes a few hours:
+
+```bash
+cd ~/GitHub/godot-desktop-pet
+nohup caffeinate -dis /Applications/Godot.app/Contents/MacOS/Godot --headless --path . -s res://tools/pc_bench.gd > /tmp/mac_bench.log 2>&1 < /dev/null &
+```
+
+The metrics are then in `~/Library/Application Support/Godot/app_userdata/Desktop Pet/pc_llm_metrics.jsonl`. Every answer is in the metrics
 file itself, under "text". Add a section here for each machine or engine version worth keeping.

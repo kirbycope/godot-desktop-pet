@@ -607,8 +607,10 @@ chat, debugging and fact finding, so each keeps its own prompt. A chat model wit
 Nothing is hard-coded to one machine. At startup the brain reads Foundry Local's catalog
 (`foundry model list -o json`), which lists every model with its size and the build Foundry would
 run here, and picks from the ranked lists in `resources/model_preferences.tres` (how every build of
-them did on an RTX 4080 laptop, with what each said, is in [BENCHMARKS.md](BENCHMARKS.md); the
-0.5B and 1.5B models answer quickly but make no sense of the duck's prompt):
+them did on an RTX 4080 laptop, with what each said, is in [BENCHMARKS.md](BENCHMARKS.md), made by
+`tools/pc_bench.gd`, which deletes each build before trying it and, once done, downloads the duck's
+own chat model again so its next start does not have to; the 0.5B and 1.5B models answer quickly but
+make no sense of the duck's prompt):
 
 | List | Best first |
 | --- | --- |
@@ -633,8 +635,13 @@ them did on an RTX 4080 laptop, with what each said, is in [BENCHMARKS.md](BENCH
 - **Reasoning models are left out** (`deepseek-r1-*`, `phi-4-reasoning`): they think aloud
   before answering, which reads badly when spoken.
 
-Loading a model takes 40 to 50 s, so when the duck was started from the Godot editor it leaves the
-chat model loaded as it closes, and the next run is up in a second or two
+Loading a model takes from 15 s to two minutes, so the duck leaves the chat model loaded, and
+Foundry Local's server running, when it closes, however it was started (`keep_loaded` on the
+Brain, on by default). On an RTX GPU Foundry picks the TensorRT-RTX build of `qwen2.5-14b`, which
+answers in about a second and a half but takes about 110 s to load, as it compiles itself for the
+GPU each time; kept loaded, only the first start after the computer starts waits for that. **Stop
+the model** on the Stats tab frees it. With `keep_loaded` off, a duck started from the Godot editor
+still leaves the chat model loaded as it closes, and the next run is up in a second or two
 (`keep_loaded_from_editor` on the Brain; it knows by the editor's debugger being attached). It
 notes the model it keeps in `user://kept_model.cfg`, and the project's own editor plugin,
 `addons/kept_model` (enabled in `project.godot`), stops Foundry Local's server when the editor
@@ -642,7 +649,7 @@ closes, which unloads the model, so nothing stays running once you stop working.
 this itself, because the editor's Stop button kills it before it can clean up. On the Mac it stops
 the llama-server too.
 
-Started any other way, the duck stops them itself as it closes: the llama-server, and Foundry
+With `keep_loaded` off and started any other way, the duck stops them itself as it closes: the llama-server, and Foundry
 Local's server, which it starts with no idle timeout and which would otherwise run for good (one was
 found two days later on the Mac). Stopping takes a few seconds. `foundry server stop` does it by
 hand, for instance after the editor crashed; note that any other `foundry` command starts the
@@ -786,7 +793,8 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Mind` | `max_memories`, `max_skills` | 40 memories in the prompt, 2 skills a message |
 | `Brain` | `max_tokens`, `max_history` | 160; 6 messages, the last three exchanges, sent with each prompt |
 | `Brain` | `debug_role`, `debug_max_tokens`, `debug_temperature` | while debugging: the slim prompt, 220 tokens, 0.3 |
-| `Brain` | `keep_loaded_from_editor` | on: run from the editor, the model stays loaded on closing, until the editor itself closes |
+| `Brain` | `keep_loaded` | on: the model stays loaded on closing, however the duck was run, until Stop the model or a restart |
+| `Brain` | `keep_loaded_from_editor` | on: with `keep_loaded` off, run from the editor, the model stays loaded on closing, until the editor itself closes |
 | `Pet` | `read_ahead_ms` | 3000: how old a screen read while typing may be and still be used at Send |
 | `Voice` | `volume`, `rate` | 70, 1.0 |
 | `ScreenReader` | `max_characters` | 6000 characters of screen text a message |

@@ -51,6 +51,12 @@ signal facts_found(facts: PackedStringArray)
 ## next run starts in a second instead of 45; the editor unloads it as it closes (KeptModel). Run
 ## any other way, the duck frees the memory as it closes.
 @export var keep_loaded_from_editor: bool = true
+## Leave the chat model loaded, and Foundry's server (or the llama-server) running, when the duck
+## closes, however it was run, so only the first start after the computer starts pays for loading.
+## On an RTX GPU Foundry picks the TensorRT-RTX build, which answers in about a second but takes
+## about two minutes to load, as it compiles itself for the GPU every time. Stop the model on the
+## Stats tab still frees it. Off, `keep_loaded_from_editor` decides.
+@export var keep_loaded: bool = true
 ## Messages sent with each prompt besides the system prompt: the last three exchanges. Every
 ## exchange is also written to the duck's folder (see Mind.record), and the last ones come back on
 ## the next start.
@@ -138,7 +144,7 @@ func _exit_tree() -> void:
 		_thread.wait_to_finish()
 	# Free the GPU or NPU memory and stop Foundry Local's server, unless run from the editor, which
 	# frees them as it closes (KeptModel).
-	var keep: bool = keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()) and not stopped
+	var keep: bool = keeps_model(keep_loaded_from_editor, EngineDebugger.is_active(), keep_loaded) and not stopped
 	if not _llama.is_empty() and (model_id.is_empty() or not keep):
 		# One still downloading or loading is stopped too, and picks up where it left off next time.
 		_stop_llama()
@@ -338,8 +344,11 @@ func _boot() -> void:
 	if not gguf.is_empty():
 		why += " Chat on llama.cpp (Metal), %s." % gguf if not llama.is_empty() else " Chat on Foundry, which is slow on a Mac: `brew install llama.cpp` for answers in a second or two."
 	call_deferred("set", "choice", why)
-	# Kept loaded between runs from the editor, which unloads it as it closes.
-	if keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
+	# Kept loaded between runs from the editor, which unloads it as it closes; kept loaded for good,
+	# the editor is not to unload it either.
+	if keep_loaded:
+		KeptModel.forget(KeptModel.PATH)
+	elif keeps_model(keep_loaded_from_editor, EngineDebugger.is_active()):
 		KeptModel.remember(KeptModel.PATH, _foundry, chosen["chat"], llama_port if not llama.is_empty() else 0)
 	if not llama.is_empty():
 		call_deferred("set", "_llama", llama)
@@ -670,10 +679,11 @@ func system_prompt(debugging: bool = false) -> String:
 	return "%s\n\n%s\n\n%s\n\nYou run entirely on this computer, on its %s.\n%s" % [mind.stable_prompt() if mind != null else "", role, sight_rules, device, hardware]
 
 
-## Whether to leave the model loaded on closing: only when run from the editor, whose debugger is
-## attached to the running duck, and only if `keep_loaded_from_editor` allows it.
-static func keeps_model(allowed: bool, from_editor: bool) -> bool:
-	return allowed and from_editor
+## Whether to leave the model loaded on closing: always with `keep_loaded`, and otherwise only when
+## run from the editor, whose debugger is attached to the running duck, if `keep_loaded_from_editor`
+## allows it.
+static func keeps_model(allowed: bool, from_editor: bool, always: bool = false) -> bool:
+	return always or (allowed and from_editor)
 
 
 ## The answer as far as it can be shown and spoken: tags taken out, and anything from a "[" that has

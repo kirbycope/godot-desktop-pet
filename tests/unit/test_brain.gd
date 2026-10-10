@@ -202,6 +202,13 @@ func test_only_a_run_from_the_editor_keeps_the_model_loaded() -> void:
 	assert_false(Brain.keeps_model(false, true), "unless told not to")
 
 
+func test_kept_loaded_for_good_the_model_outlives_any_run() -> void:
+	assert_true(Brain.keeps_model(false, false, true), "run on its own, it stays loaded too")
+	var brain: Brain = (load("res://scripts/brain.gd") as GDScript).new()
+	assert_true(brain.keep_loaded, "on by default")
+	brain.free()
+
+
 func test_a_tag_is_never_shown_or_spoken_even_half_written() -> void:
 	assert_eq(Brain.speakable("Hello! [remember: user likes ducks] Bye."), "Hello! Bye.")
 	assert_eq(Brain.speakable("Hello! [remem"), "Hello! ", "held back until it closes")

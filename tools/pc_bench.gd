@@ -17,8 +17,10 @@ extends SceneTree
 ##   godot --headless --path . -s res://tools/pc_bench.gd
 ##
 ## DUCK_BENCH_BUILDS: comma-separated build names (variantName in `foundry model list --variants`)
-## to try instead of every one. Speech models are left alone; the chat model the duck uses is
-## downloaded again when it next starts.
+## to try instead of every one. Speech models are left alone. Once every build is done, the cache is
+## put back as the duck needs it: the last build tried goes, and the chat model the duck chooses on
+## this machine is downloaded, so its next start does not download it. (On a Mac, llama-server
+## downloads its GGUF itself as the duck next starts.)
 
 const OUT: String = "user://pc_llm_metrics.jsonl"
 const FOLDER: String = "user://pc_bench"
@@ -95,6 +97,7 @@ func _run() -> void:
 			await _try(by_name[names[i]], "%d of %d" % [total - names.size() + i + 1, total])
 	_record({"kind": "end"})
 	await _let_go()
+	_put_back()
 	print("pc_bench: done")
 	quit()
 
@@ -221,6 +224,21 @@ func _clear() -> int:
 				freed += int(build.get("fileSizeMb", 0))
 	OS.execute(_foundry, ["server", "stop"])
 	return freed
+
+
+## Clears the builds tried and downloads the chat model the duck chooses here, as Brain does.
+func _put_back() -> void:
+	_clear()
+	_serve()
+	var prefs: ModelPreferences = load("res://resources/model_preferences.tres")
+	var output: Array = []
+	OS.execute(_foundry, ["model", "list", "-o", "json"], output)
+	var models: Array = ModelPreferences.parse_catalog("".join(output), "models")
+	var chosen: String = Brain.choose(prefs, models, _catalog(), Hardware.memory_budgets(prefs.memory_share), OS.get_locale_language(), "", OS.get_name())["chat"]
+	if not chosen.is_empty():
+		print("pc_bench: downloading %s again, the duck's own chat model" % chosen)
+		OS.execute(_foundry, ["model", "download", chosen])
+	OS.execute(_foundry, ["server", "stop"])
 
 
 func _catalog() -> Array:

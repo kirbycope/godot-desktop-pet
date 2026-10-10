@@ -59,7 +59,11 @@ def main():
     pc = "gpu_c" in bench or "foundry_mb" in bench
     system = device.get("os") or ("Android %s" % device.get("android", "?"))
     print("Benchmark %s on %s (%s%s, %s)\n" % (run, device.get("model", "?"), device.get("soc", "?"), ", " + device["gpu"] if device.get("gpu") else "", system))
-    heads = ["Foundry MB", "GPU MB", "GPU C"] if pc else ["Peak MB", "Battery C"]
+    # A Mac has llama-server and no GPU sensor; a PC has an NVIDIA GPU and no llama-server.
+    lines = [e for e in entries if e.get("run") == run]
+    llama = pc and any(float(e.get("llama_mb", 0)) > 0 for e in lines)
+    gpu = pc and any("gpu_c" in e for e in lines)
+    heads = (["Foundry MB"] + (["llama.cpp MB"] if llama else []) + (["GPU MB", "GPU C"] if gpu else [])) if pc else ["Peak MB", "Battery C"]
     print("| Setup | Download MB | s | MB/s | Warm-up s | 1st: word s | 1st: talking s | 1st: whole s | Later: word s | Later: talking s | Later: whole s | Decode tok/s | Prefill tok/s | " + " | ".join(heads) + " | Result |")
     print("| --- |" + " ---: |" * (12 + len(heads)) + " --- |")
     for setup in order:
@@ -82,7 +86,9 @@ def main():
         def most(key):
             return max((float(r.get(key, 0)) for r in own), default=0) or None
 
-        sizes = [cell(most("foundry_mb"), "{:.0f}"), cell(most("gpu_mem_mb"), "{:.0f}"), cell(most("gpu_c"), "{:.0f}")] if pc else [cell(most("pss_mb"), "{:.0f}"), cell(most("battery_c"), "{:.1f}")]
+        sizes = [cell(most("pss_mb"), "{:.0f}"), cell(most("battery_c"), "{:.1f}")]
+        if pc:
+            sizes = [cell(most("foundry_mb"), "{:.0f}")] + ([cell(most("llama_mb"), "{:.0f}")] if llama else []) + ([cell(most("gpu_mem_mb"), "{:.0f}"), cell(most("gpu_c"), "{:.0f}")] if gpu else [])
         print("| %s | " % label + " | ".join([
             cell(download.get("mb"), "{:.0f}"), cell(download.get("seconds"), "{:.0f}"), cell(download.get("mb_per_s"), "{:.1f}"),
             cell(load.get("seconds"), "{:.1f}"),
