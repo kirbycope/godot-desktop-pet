@@ -454,8 +454,11 @@ Every download, start and answer is timed and kept in `user://llm_metrics.jsonl`
 the download's size, time and speed; the warm-up from the end of the download to the model being
 ready (and LiteRT-LM's own count of its start); and for each answer the time to its first word, to
 its first whole sentence (when the duck starts talking), and to its end, its length and its speed
-in tokens a second, the first answer after a start marked apart from the warmed-up ones. LiteRT-LM
-adds its own time to first token and its prefill and decode speeds. Each line also carries the
+in tokens a second, the first answer after a start marked apart from the warmed-up ones, and
+whether its text reads as nonsense (`LlmMetrics.garbled`: letters of another writing system inside
+an English answer, or words run together mid-sentence), which fails the setup however fast it is;
+a benchmark keeps the answers themselves too. LiteRT-LM adds its own time to first token and its
+prefill and decode speeds. Each line also carries the
 app's memory, the memory the phone has left, the battery's temperature and Android's thermal state
 (a hot phone slows its own chips down), from the plugin's `DuckDevice` singleton. To take the file
 off the phone:
@@ -601,7 +604,9 @@ chat, debugging and fact finding, so each keeps its own prompt. A chat model wit
 
 Nothing is hard-coded to one machine. At startup the brain reads Foundry Local's catalog
 (`foundry model list -o json`), which lists every model with its size and the build Foundry would
-run here, and picks from the ranked lists in `resources/model_preferences.tres`:
+run here, and picks from the ranked lists in `resources/model_preferences.tres` (how every build of
+them did on an RTX 4080 laptop, with what each said, is in [BENCHMARKS.md](BENCHMARKS.md); the
+0.5B and 1.5B models answer quickly but make no sense of the duck's prompt):
 
 | List | Best first |
 | --- | --- |
@@ -824,7 +829,8 @@ scripts/local_bench.gd      the benchmark: every engine and model on the phone i
 android_plugin/             the GeminiNano Android plugin's Kotlin source and Gradle project: Gemini Nano, LiteRT-LM, DuckDevice
 addons/GeminiNano/          the plugin, built: its AARs and the export script that adds it, ML Kit and LiteRT-LM to the app
 tools/fetch_nobodywho.py    fetches NobodyWho into addons/nobodywho
-tools/llm_report.py         turns the phone's model metrics into a comparison table
+tools/llm_report.py         turns the model metrics (phone, PC or Mac) into a comparison table
+tools/pc_bench.gd           benchmarks every Foundry Local build of the duck's chat models on a PC or Mac
 BENCHMARKS.md               the phone models' benchmark results, kept per phone
 benchmarks/                 each benchmark's raw metrics lines
 scripts/suds.gd             the bubble bath's foam, round the duck and floating about

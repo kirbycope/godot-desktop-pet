@@ -63,6 +63,10 @@ func test_each_setup_starts_clean_and_is_recorded_under_the_run() -> void:
 	assert_eq(kinds, [["bench", ""], ["cleared", "litertlm-gemma4-e2b-gpu"], ["cooled", "litertlm-gemma4-e2b-gpu"], ["failed", "litertlm-gemma4-e2b-gpu"], ["done", "litertlm-gemma4-e2b-gpu"], ["cleared", "gemini-nano"], ["cooled", "gemini-nano"], ["failed", "gemini-nano"], ["done", "gemini-nano"], ["end", ""]])
 	assert_eq(LocalBench.unfinished(LlmMetrics.read(brain.metrics_path)), {}, "a run that ended is not taken up again")
 	assert_eq(LlmMetrics.read(brain.metrics_path)[1]["mb"], 0, "three bytes freed is 0 MB")
+	bench_mind.remember("likes pancakes")
+	bench.setups = PackedStringArray(["gemini-nano"])
+	await bench.run()
+	assert_eq(bench_mind.memories(), PackedStringArray(), "each setup starts with a mind of its own, remembering nothing")
 
 
 func test_it_waits_for_the_phone_to_cool() -> void:
@@ -81,7 +85,7 @@ func test_a_run_cut_short_is_taken_up_where_it_stopped() -> void:
 		{"kind": "cleared", "run": "r", "setup": "b"},
 		{"kind": "answer", "run": "r", "setup": "b", "turn": 1},
 	]
-	assert_eq(LocalBench.unfinished(entries), {"run": "r", "setups": PackedStringArray(["b", "c"]), "total": 3, "battery_c": 37.1}, "b again from the start, then c")
+	assert_eq(LocalBench.unfinished(entries), {"run": "r", "setups": PackedStringArray(["b", "c"]), "total": 3, "battery_c": 37.1, "gpu_c": 0.0}, "b again from the start, then c")
 	entries.append({"kind": "done", "run": "r", "setup": "b"})
 	entries.append({"kind": "done", "run": "r", "setup": "c"})
 	assert_eq(LocalBench.unfinished(entries), {}, "every setup done")

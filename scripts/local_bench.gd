@@ -19,15 +19,19 @@ signal asked(line: String)
 signal finished
 
 @export var brain: LocalBrain
-## A Mind of its own for the run, so the duck's memories and conversations are not touched.
-@export var mind: Mind
-## The first is the duck's first answer after it starts; the rest show it warmed up.
-@export var prompts: PackedStringArray = PackedStringArray([
+## The phone's lines, also asked of the PC and Mac (tools/pc_bench.gd). The first is the duck's
+## first answer after it starts; the rest show it warmed up.
+const PROMPTS: PackedStringArray = [
 	"Hi duck, what do you like to do for fun?",
 	"What's your favourite colour?",
 	"My loop never ends. What should I check first?",
 	"Tell me a short joke about ducks.",
-])
+]
+
+## A Mind of its own for the run, so the duck's memories and conversations are not touched. It
+## starts afresh for each setup, so what one model remembered cannot change the next one's prompt.
+@export var mind: Mind
+@export var prompts: PackedStringArray = PROMPTS
 ## The setups to try, by id; empty tries every one of LocalBrain.SETUPS.
 @export var setups: PackedStringArray = PackedStringArray()
 ## Seconds to settle after a model is let go and the models are deleted, before the next starts.
@@ -104,6 +108,9 @@ func _try(id: String, count: String) -> void:
 	progressed.emit("%s: %s. Cleared %d MB of models; settling." % [count, setup.get("label", id), freed / 1000000])
 	await get_tree().create_timer(settle_seconds).timeout
 	await _cool_down(setup, "before starting", count)
+	if mind != null:
+		LocalBrain.remove_tree(ProjectSettings.globalize_path(mind.root))
+		mind.ensure_seeded()
 	brain.new_conversation()
 	brain.start()
 	var began: float = Time.get_ticks_msec() / 1000.0
@@ -139,7 +146,8 @@ func _done(setup: Dictionary) -> void:
 
 
 ## The last benchmark in `entries` if it was cut short: {run, setups (those not done, or whose last
-## try failed, in order), total, battery_c (as it began)}; {} when it ended, or there is none.
+## try failed, in order), total, battery_c and gpu_c (as it began)}; {} when it ended, or there is
+## none.
 static func unfinished(entries: Array[Dictionary]) -> Dictionary:
 	var bench: Dictionary = {}
 	for entry: Dictionary in entries:
@@ -167,7 +175,7 @@ static func unfinished(entries: Array[Dictionary]) -> Dictionary:
 			left.append(str(id))
 	if left.is_empty():
 		return {}
-	return {"run": bench["run"], "setups": left, "total": (bench.get("setups", []) as Array).size(), "battery_c": float(bench.get("battery_c", 0.0))}
+	return {"run": bench["run"], "setups": left, "total": (bench.get("setups", []) as Array).size(), "battery_c": float(bench.get("battery_c", 0.0)), "gpu_c": float(bench.get("gpu_c", 0.0))}
 
 
 ## Waits, up to `cool_timeout`, for the phone to be cool, and records how long that took.

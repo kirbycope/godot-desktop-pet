@@ -18,11 +18,14 @@ extends RefCounted
 ##   answer    "turn" (1 is the first after a start), "first_word_s", "first_sentence_s" (when the
 ##             duck starts talking), "total_s", "chars", "pieces" (tokens, or chunks for LiteRT-LM
 ##             and Gemini Nano), and LiteRT-LM's own "native_ttft_s", "prefill_tps", "decode_tps",
-##             "prefill_tokens" and "decode_tokens"
+##             "prefill_tokens" and "decode_tokens"; "garbled" when the text reads as nonsense
+##             (garbled()), and in a benchmark the answer itself as "text"
 ##   failed    "why"
 ## Every line also carries "pss_mb", "avail_mb", "battery_c" and "thermal" where the phone says.
 
 const PATH: String = "user://llm_metrics.jsonl"
+## Words run together mid-sentence, as a model writing nonsense does: "thingsSoundNhap", "aDance".
+const GLUED: String = r"\b[a-z]+[A-Z][a-z]+"
 
 
 ## Adds `entry` to the file at `path`, stamped with the time and the phone's state. Nothing for "".
@@ -106,6 +109,8 @@ static func setup_summary(entries: Array) -> String:
 	var label: String = ""
 	var parts: PackedStringArray = PackedStringArray()
 	var later: Array[Dictionary] = []
+	var answers: int = 0
+	var garbles: int = 0
 	var peak: int = 0
 	for entry: Dictionary in entries:
 		label = str(entry.get("label", label))
@@ -118,6 +123,9 @@ static func setup_summary(entries: Array) -> String:
 			"load":
 				parts.append("Warm-up %s" % seconds(entry.get("seconds", 0.0)))
 			"answer":
+				answers += 1
+				if entry.get("garbled", false):
+					garbles += 1
 				if int(entry.get("turn", 0)) == 1:
 					parts.append("First answer: " + answer_line([entry]))
 				else:
@@ -126,6 +134,9 @@ static func setup_summary(entries: Array) -> String:
 				parts.append("Failed: %s" % entry.get("why", ""))
 	if not later.is_empty():
 		parts.append("Later answers (%d): %s" % [later.size(), answer_line(later)])
+	if garbles > 0:
+		# However fast, a model that writes nonsense has failed.
+		parts.insert(0, "Failed: garbled text in %d of %d answers" % [garbles, answers])
 	if peak > 0:
 		parts.append("Memory up to %.1f GB" % (peak / 1000.0))
 	return "%s\n%s" % [label, "\n".join(parts)]
@@ -154,6 +165,26 @@ static func answer_line(answers: Array[Dictionary]) -> String:
 	if mean.has("decode_tps"):
 		said.append("%.1f tokens/s" % mean["decode_tps"])
 	return ", ".join(said)
+
+
+## Whether `text` reads as nonsense, as a model on a backend it does not suit writes: letters of
+## another writing system inside an answer mostly in the Latin alphabet (English broken off into
+## bits of Hindi, Thai or Korean), or three or more words run together mid-sentence. Tuned on what
+## Gemma 4's -gpu.litertlm files wrote on a Snapdragon 8 Gen 3 (BENCHMARKS.md), and on what every
+## sound setup wrote in the same run, none of which it flags. An answer wholly in another script, as
+## to a user writing in one, is not flagged.
+static func garbled(text: String) -> bool:
+	var latin: int = 0
+	var other: int = 0
+	for i: int in text.length():
+		var c: int = text.unicode_at(i)
+		if (c >= 0x41 and c <= 0x5A) or (c >= 0x61 and c <= 0x7A) or (c >= 0xC0 and c <= 0x24F) or (c >= 0x1E00 and c <= 0x1EFF):
+			latin += 1
+		elif (c >= 0x370 and c < 0x2000) or (c >= 0x3040 and c <= 0x9FFF) or (c >= 0xAC00 and c <= 0xD7AF):
+			other += 1
+	if latin > 0 and other > 0 and latin >= (latin + other) * 0.6:
+		return true
+	return RegEx.create_from_string(GLUED).search_all(text).size() >= 3
 
 
 ## A time as it reads best: "0.42 s", "8.1 s", "2 min 05 s".

@@ -636,7 +636,12 @@ func _finish(text: String, timings: Dictionary = {}) -> void:
 	_history.append({"role": "assistant", "content": reply})
 	_history = _history.slice(maxi(0, _history.size() - max_history))
 	_busy = false
-	_record("answer", answer_metrics(_asked_at, _first_piece_at, _first_sentence_at, _now(), _turn, _pieces, reply.length(), timings))
+	var metrics: Dictionary = answer_metrics(_asked_at, _first_piece_at, _first_sentence_at, _now(), _turn, _pieces, reply.length(), timings)
+	metrics["garbled"] = LlmMetrics.garbled(text)
+	if not run.is_empty():
+		# A benchmark's answers are kept with its times, to be read as well as timed.
+		metrics["text"] = reply
+	_record("answer", metrics)
 	replied.emit(reply)
 
 

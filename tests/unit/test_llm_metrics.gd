@@ -59,6 +59,24 @@ func test_the_summary_is_the_last_benchmark_setup_by_setup() -> void:
 	assert_false(text.contains("99"))
 
 
+func test_nonsense_is_caught_and_fails_the_setup() -> void:
+	# What Gemma 4's -gpu.litertlm files wrote on a Galaxy S24 Ultra.
+	assert_true(LlmMetrics.garbled("Hello clan! I think you guys differently innCitफ्रा บริษัท for the fun is a challenge to discover!"))
+	assert_true(LlmMetrics.garbled("Well름, of course! Hereassium understand-able!"), "one stray letter is enough")
+	assert_true(LlmMetrics.garbled("Ouch, thingsSoundNhap structure-aware! I'd probably checkSleep, just like aLib happens creep!"), "words run together")
+	# And what the sound setups wrote in the same run.
+	assert_false(LlmMetrics.garbled("A loop that won't end sounds like a real puzzle, doesn't it? Have you thought about what happens to the variable controlling the loop?"))
+	assert_false(LlmMetrics.garbled("Have you checked if isRunning ever goes false?"), "a name from code or two is not nonsense")
+	assert_false(LlmMetrics.garbled("Café au lait, naïve, and Ångström are all Latin letters."))
+	assert_false(LlmMetrics.garbled("ループが終わらないなら、まず条件を確かめましょう。"), "an answer in another script throughout is fine")
+	var lines: Array[Dictionary] = [
+		{"kind": "bench", "run": "r"},
+		{"kind": "answer", "run": "r", "setup": "a", "label": "Fast", "turn": 1, "total_s": 1.0, "garbled": true},
+		{"kind": "answer", "run": "r", "setup": "a", "label": "Fast", "turn": 2, "total_s": 1.0, "garbled": false},
+	]
+	assert_string_contains(LlmMetrics.summary(lines), "Fast\nFailed: garbled text in 1 of 2 answers", "however fast, it failed")
+
+
 func test_times_read_as_seconds_or_minutes() -> void:
 	assert_eq(LlmMetrics.seconds(0.4234), "0.42 s")
 	assert_eq(LlmMetrics.seconds(8.06), "8.1 s")
