@@ -23,6 +23,13 @@ func test_a_build_is_named_by_model_provider_and_chip() -> void:
 	assert_eq(PcBench.label_for({"alias": "phi-4-mini", "device": "Cpu", "executionProvider": "CPUExecutionProvider"}), "Phi 4 Mini, Foundry CPU")
 
 
+func test_on_a_mac_each_gguf_is_a_setup_too() -> void:
+	var builds: Array[Dictionary] = PcBench.llama_builds({"qwen2.5-7b": "bartowski/Qwen2.5-7B-Instruct-GGUF:Q4_K_M"})
+	assert_eq(builds[0]["variantName"], "llama-qwen2.5-7b")
+	assert_eq(PcBench.label_for(builds[0]), "Qwen 2.5 7B, llama.cpp Metal")
+	assert_string_ends_with(PcBench.hf_folder("bartowski/Qwen2.5-7B-Instruct-GGUF:Q4_K_M"), "hub/models--bartowski--Qwen2.5-7B-Instruct-GGUF")
+
+
 func test_the_gpu_is_cool_near_where_it_began_and_idle() -> void:
 	assert_true(PcBench.cool_enough({"gpu_c": 46.0, "gpu_util": 0}, 48.0, 10))
 	assert_false(PcBench.cool_enough({"gpu_c": 61.0, "gpu_util": 0}, 48.0, 10), "still warm")

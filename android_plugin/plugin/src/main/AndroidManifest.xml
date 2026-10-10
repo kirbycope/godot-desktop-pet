@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- The phone's speech recognizer, which DuckSpeech talks to, is another app's service. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+    </queries>
+
     <application>
         <!-- Tells Godot these are v2 plugins, and which classes start them. -->
         <meta-data
@@ -12,6 +19,9 @@
         <meta-data
             android:name="org.godotengine.plugin.v2.DuckDevice"
             android:value="${godotPluginPackageName}.DuckDevicePlugin"/>
+        <meta-data
+            android:name="org.godotengine.plugin.v2.DuckSpeech"
+            android:value="${godotPluginPackageName}.DuckSpeechPlugin"/>
         <!-- LiteRT-LM's GPU backend runs through the phone's OpenCL, where it has one. -->
         <uses-native-library android:name="libOpenCL.so" android:required="false"/>
         <uses-native-library android:name="libvndksupport.so" android:required="false"/>

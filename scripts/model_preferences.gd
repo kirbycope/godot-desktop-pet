@@ -86,10 +86,12 @@ static func needs_mb(model: Dictionary, overhead_factor: float) -> float:
 	return float(model.get("fileSizeMb", 0)) * overhead_factor
 
 
-## The catalog's own list from `foundry model list -o json` or `--variants -o json`.
+## The catalog's own list from `foundry model list -o json` or `--variants -o json`. On macOS a
+## command that starts the server prints "foundrylocald ... starting" before the JSON; that goes.
 static func parse_catalog(json: String, key: String) -> Array:
 	var parsed: JSON = JSON.new()
-	if parsed.parse(json) != OK or not parsed.data is Dictionary:
+	var start: int = json.find("{")
+	if start < 0 or parsed.parse(json.substr(start)) != OK or not parsed.data is Dictionary:
 		return []
 	var list: Variant = parsed.data.get(key, [])
 	return list if list is Array else []

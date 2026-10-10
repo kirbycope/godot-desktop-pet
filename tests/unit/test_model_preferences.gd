@@ -102,3 +102,10 @@ func test_the_brain_uses_the_preferences_resource() -> void:
 	assert_not_null(brain.preferences)
 	assert_eq(brain.model_alias, "", "chosen per machine unless overridden")
 	pet.free()
+
+
+func test_the_catalog_reads_past_the_line_a_starting_server_prints() -> void:
+	# What `foundry model list -o json` prints on macOS when it has to start the server first.
+	var printed: String = "foundrylocald 0.10.3 starting (log-level=info)\n{\"models\":[{\"alias\":\"qwen2.5-7b\",\"type\":\"Chat\"}]}"
+	assert_eq(ModelPreferences.parse_catalog(printed, "models").size(), 1)
+	assert_eq(ModelPreferences.parse_catalog("no catalog here", "models"), [])

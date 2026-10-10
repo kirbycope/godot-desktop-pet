@@ -329,3 +329,8 @@ func test_pushing_the_duck_down_squeezes_it() -> void:
 	assert_true(RemoteApp.is_squash(0.0, Vector2(0.0, -0.4)), "swiped down into the water")
 	assert_false(RemoteApp.is_squash(0.2, Vector2.ZERO), "lifted out and let go: a drop")
 	assert_false(RemoteApp.is_squash(0.01, Vector2(3.0, 0.5)), "flung along the water: a throw")
+
+
+func test_the_phone_asks_its_recognizer_for_its_own_language() -> void:
+	assert_eq(RemoteApp.speech_language("en_US"), "en-US")
+	assert_eq(RemoteApp.speech_language("de"), "de")

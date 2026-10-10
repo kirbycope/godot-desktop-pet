@@ -1,6 +1,6 @@
 @tool
 extends EditorPlugin
-## Adds the GeminiNano Android plugin (Gemini Nano, LiteRT-LM and the phone's own stats), and the
+## Adds the GeminiNano Android plugin (Gemini Nano, LiteRT-LM, the phone's own stats and its speech recognizer), and the
 ## libraries it needs, to the Android export.
 
 var export_plugin: AndroidExportPlugin

@@ -106,6 +106,9 @@ var _utterance: int = 0
 @onready var bubbles: CPUParticles3D = $Layout/DuckView/Viewport/Bubbles
 @onready var water: MeshInstance3D = $Layout/DuckView/Viewport/Water
 @onready var pond_camera: Camera3D = $Layout/DuckView/Viewport/PondCamera
+## The phone's own speech recognizer (the DuckSpeech Android plugin), which writes down what you say
+## when there is no PC to; null on a desktop, or in a build without the plugin.
+var _ears: Object = null
 
 
 func _ready() -> void:
@@ -135,6 +138,10 @@ func _ready() -> void:
 	_set_awake(false, "")
 	if DisplayServer.has_feature(DisplayServer.FEATURE_TEXT_TO_SPEECH):
 		DisplayServer.tts_set_utterance_callback(DisplayServer.TTS_UTTERANCE_ENDED, _on_utterance_ended)
+	if Engine.has_singleton("DuckSpeech"):
+		_ears = Engine.get_singleton("DuckSpeech")
+		_ears.connect("speech_state", _on_speech_state)
+		_ears.connect("speech_heard", _on_speech_heard)
 	if not _host.is_empty() and not _code.is_empty():
 		_connect()
 	else:
@@ -363,7 +370,7 @@ func _on_player_finished() -> void:
 
 func _on_utterance_ended(id: int) -> void:
 	if id == _utterance:
-		_after_speaking.call_deferred()
+		_after_speaking.call_deferred() if mode != Mode.LOCAL else _listen_local.call_deferred()
 
 
 ## Back to idle and listening once the answer is in and nothing is left to say.
@@ -505,13 +512,14 @@ func _go_alone(alone: Mode) -> void:
 	_show_phone_model_controls()
 
 
-## In local mode the box opens once a model is ready; the mic stays off, as the PC is what writes
-## down speech.
+## In local mode the box and the mic open once a model is ready; the mic needs the phone's own
+## speech recognizer, as there is no PC to write down what you say.
 func _set_local_entry() -> void:
 	tabs.input.editable = local_brain.is_ready()
 	tabs.send_button.disabled = not local_brain.is_ready() or local_brain.is_busy()
-	tabs.mic_button.disabled = true
-	tabs.mic_button.tooltip_text = "Talking needs the PC, which writes down what you say. Type here instead."
+	var can_hear: bool = _ears != null and bool(_ears.call("available"))
+	tabs.mic_button.disabled = not local_brain.is_ready() or not can_hear
+	tabs.mic_button.tooltip_text = "Talk to the duck. This phone writes down what you say, and listens again after it answers. Click again to stop." if can_hear else "This phone has no speech recognizer. Type here instead."
 	tabs.new_button.disabled = false
 	tabs.past_button.disabled = false
 
@@ -586,6 +594,8 @@ func _on_local_brain_replied(text: String) -> void:
 	_set_status("")
 	_set_local_entry()
 	duck.play(&"idle")
+	# Muted, or done speaking before the answer was: nothing will end an utterance to listen after.
+	_listen_local()
 
 
 ## What the duck remembered or learned on the way, noted under the answer.
@@ -836,6 +846,14 @@ func _on_conversation_chosen(id: String) -> void:
 
 func _on_mic_toggled(on: bool) -> void:
 	tabs.mic_dot.visible = on
+	if mode == Mode.LOCAL:
+		if on:
+			_listen_local()
+		elif _ears != null:
+			# What you were in the middle of saying still arrives, and is sent.
+			_ears.call("stop")
+			_set_status("")
+		return
 	if on:
 		listener.start()
 		if listener.mode == Listener.Mode.OFF:
@@ -854,6 +872,46 @@ func _on_listener_mode_changed(mode: Listener.Mode) -> void:
 				_set_status("Listening...")
 		Listener.Mode.HEARING:
 			_set_status("Hearing you...")
+
+
+## With no PC, the phone listens for a sentence itself while the mic is on, the model is free and
+## the duck is not talking (it would hear itself).
+func _listen_local() -> void:
+	if mode != Mode.LOCAL or _ears == null or not tabs.mic_button.button_pressed:
+		return
+	if not local_brain.is_ready() or local_brain.is_busy() or DisplayServer.tts_is_speaking():
+		return
+	_ears.call("start", speech_language(OS.get_locale()))
+
+
+func _on_speech_state(state: String) -> void:
+	if mode != Mode.LOCAL:
+		return
+	match state:
+		"listening":
+			_set_status("Listening...")
+		"hearing":
+			_set_status("Hearing you...")
+		"quiet":
+			# Nothing said before it gave up: listen again while the mic is on.
+			_listen_local.call_deferred()
+		_:
+			_set_status("Couldn't hear you: " + state.trim_prefix("failed: "))
+			tabs.mic_button.set_pressed_no_signal(false)
+			tabs.mic_dot.visible = false
+
+
+## What you said, written down by the phone: sent to its own duck as if typed.
+func _on_speech_heard(text: String) -> void:
+	if mode != Mode.LOCAL:
+		return
+	_set_status("")
+	_on_tabs_line_sent(text)
+
+
+## Godot's locale ("en_US") as the language tag Android's recognizer takes ("en-US").
+static func speech_language(locale: String) -> String:
+	return locale.replace("_", "-")
 
 
 ## A spoken sentence goes to the PC to be written down and answered.

@@ -426,8 +426,10 @@ the desk, "why does this crash?" reads your editor.
   is the slow one, as it reads the duck's personality, which then stays read. Once downloaded, a model
   stays the duck's and later starts load it straight away. The header and the Stats tab name it and
   count the download's megabytes as they come. Thinking is turned off, as the PC duck leaves reasoning
-  models out, and emoji and markdown are never said. The mic is off in this mode, since speech is
-  written down on the PC; type instead. The model lets go of its memory whenever it is not in use:
+  models out, and emoji and markdown are never said. The mic works here too: with no PC to write
+  speech down, the phone's own speech recognizer does (Android's on-device one where the phone has
+  it, through the plugin's `DuckSpeech` singleton), each sentence goes to the phone's model as if
+  typed, and it listens again once the duck has finished saying the answer. The model lets go of its memory whenever it is not in use:
   when the app goes to the background (and wakes again, from the model already downloaded, when it
   comes back), when the app closes, on **Stop the model** on the Stats tab, and on **Find PC**.
 
@@ -534,7 +536,7 @@ passing the package name in a `--package_file`, since a `.bat` splits it at the 
 templates from the `4.8-dev6` release of godot-builds. Then:
 
 The local LLM needs two more things, once: NobodyWho, fetched rather than committed, and the
-`GeminiNano` plugin's AARs (Gemini Nano, LiteRT-LM and the phone's own stats), built from
+`GeminiNano` plugin's AARs (Gemini Nano, LiteRT-LM, the phone's own stats and its speech recognizer), built from
 `android_plugin/` with its Gradle wrapper into `addons/GeminiNano/` (the AARs are committed, so this
 is only needed after changing the plugin; LiteRT-LM is built with Kotlin 2.4, so the plugin is too).
 The export is a Gradle build, which also installs Godot's Android build template into `android/`
@@ -826,7 +828,7 @@ scripts/remote_app.gd       the phone app's pairing, chat, voice and the duck's 
 scripts/local_brain.gd      the phone's own brain with no PC: Gemini Nano, LiteRT-LM or NobodyWho, timed
 scripts/llm_metrics.gd      the phone's model metrics: a JSON line per download, start and answer, and their summary
 scripts/local_bench.gd      the benchmark: every engine and model on the phone in turn, from a clean start
-android_plugin/             the GeminiNano Android plugin's Kotlin source and Gradle project: Gemini Nano, LiteRT-LM, DuckDevice
+android_plugin/             the GeminiNano Android plugin's Kotlin source and Gradle project: Gemini Nano, LiteRT-LM, DuckDevice, DuckSpeech
 addons/GeminiNano/          the plugin, built: its AARs and the export script that adds it, ML Kit and LiteRT-LM to the app
 tools/fetch_nobodywho.py    fetches NobodyWho into addons/nobodywho
 tools/llm_report.py         turns the model metrics (phone, PC or Mac) into a comparison table
