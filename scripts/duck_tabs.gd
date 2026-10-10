@@ -22,6 +22,10 @@ signal pomodoro_pressed(action: String)
 signal lengths_changed(minutes: Array[int])
 ## The Stats tab's button: stop the language model (false) or start it again (true).
 signal model_toggled(run: bool)
+## The phone's model picker (shown only on the phone): a LocalBrain setup id, or "auto".
+signal setup_chosen(id: String)
+## Run the benchmark (true) or stop it (false); shown only on the phone.
+signal bench_toggled(run: bool)
 ## A voice was picked from the list, or DOWNLOAD_KOKORO, the natural voices' download entry.
 signal voice_selected(id: String)
 signal voice_tested(id: String)
@@ -71,6 +75,8 @@ var _scroll_tween: Tween
 @onready var tick: Timer = $Pomodoro/Tick
 @onready var stats: RichTextLabel = $Stats/Text
 @onready var model_button: Button = $Stats/Model
+@onready var setup_list: OptionButton = $Stats/Setup
+@onready var bench_button: Button = $Stats/Bench
 @onready var voices: OptionButton = $Settings/Voices
 @onready var test_button: Button = $Settings/Buttons/Test
 @onready var apply_button: Button = $Settings/Buttons/Apply
@@ -345,6 +351,30 @@ func show_model(running: bool, stopped: bool) -> void:
 
 func _on_model_pressed() -> void:
 	model_toggled.emit(model_button.text == "Start the model")
+
+
+## The setups to pick from, [{id, label}], with `chosen` picked.
+func show_setups(items: Array, chosen: String) -> void:
+	setup_list.clear()
+	for item: Dictionary in items:
+		setup_list.add_item(str(item["label"]))
+		setup_list.set_item_metadata(setup_list.item_count - 1, str(item["id"]))
+		if item["id"] == chosen:
+			setup_list.select(setup_list.item_count - 1)
+
+
+func _on_setup_selected(index: int) -> void:
+	setup_chosen.emit(str(setup_list.get_item_metadata(index)))
+
+
+## The benchmark button: Run, or Stop while a benchmark runs, when nothing else is in the way.
+func show_bench(running: bool) -> void:
+	bench_button.text = "Stop the benchmark" if running else "Run the benchmark"
+	setup_list.disabled = running
+
+
+func _on_bench_pressed() -> void:
+	bench_toggled.emit(bench_button.text == "Run the benchmark")
 
 
 # Settings

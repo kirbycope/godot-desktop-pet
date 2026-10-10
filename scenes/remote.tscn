@@ -20,6 +20,7 @@
 [ext_resource type="Script" path="res://scripts/pomodoro.gd" id="pomodoro"]
 [ext_resource type="Script" path="res://scripts/mind.gd" id="mind"]
 [ext_resource type="Script" path="res://scripts/local_brain.gd" id="local_brain"]
+[ext_resource type="Script" path="res://scripts/local_bench.gd" id="local_bench"]
 
 [sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_fast"]
 streams_count = 5
@@ -456,6 +457,12 @@ visible = false
 [node name="Mic" parent="Layout/Chat/Margin/Column/Tabs/Chat/Entry" index="2"]
 custom_minimum_size = Vector2(96, 0)
 
+[node name="Setup" parent="Layout/Chat/Margin/Column/Tabs/Stats" index="2"]
+visible = true
+
+[node name="Bench" parent="Layout/Chat/Margin/Column/Tabs/Stats" index="3"]
+visible = true
+
 [node name="Pairing" type="PanelContainer" parent="."]
 layout_mode = 1
 anchors_preset = 8
@@ -550,6 +557,17 @@ script = ExtResource("mind")
 [node name="LocalBrain" type="Node" parent="." node_paths=PackedStringArray("mind")]
 script = ExtResource("local_brain")
 mind = NodePath("../Mind")
+model_path = "hf://NobodyWho/Google_Gemma4-E2B-GGUF/gemma-4-E2B-it-Q4_K_M.gguf"
+metrics_path = "user://llm_metrics.jsonl"
+
+[node name="BenchMind" type="Node" parent="."]
+script = ExtResource("mind")
+root = "user://bench"
+
+[node name="Bench" type="Node" parent="." node_paths=PackedStringArray("brain", "mind")]
+script = ExtResource("local_bench")
+brain = NodePath("../LocalBrain")
+mind = NodePath("../BenchMind")
 
 [node name="Listener" type="Node" parent="."]
 script = ExtResource("3")
@@ -586,6 +604,8 @@ wait_time = 5.0
 [connection signal="pomodoro_pressed" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_pomodoro_pressed"]
 [connection signal="lengths_changed" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_lengths_changed"]
 [connection signal="model_toggled" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_model_toggled"]
+[connection signal="setup_chosen" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_setup_chosen"]
+[connection signal="bench_toggled" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_bench_toggled"]
 [connection signal="voice_selected" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_selected"]
 [connection signal="voice_tested" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_tested"]
 [connection signal="voice_applied" from="Layout/Chat/Margin/Column/Tabs" to="." method="_on_voice_applied"]
@@ -606,6 +626,9 @@ wait_time = 5.0
 [connection signal="status_changed" from="LocalBrain" to="." method="_on_local_brain_status_changed"]
 [connection signal="sentence" from="LocalBrain" to="." method="_on_local_brain_sentence"]
 [connection signal="replied" from="LocalBrain" to="." method="_on_local_brain_replied"]
+[connection signal="progressed" from="Bench" to="." method="_on_bench_progressed"]
+[connection signal="asked" from="Bench" to="." method="_on_bench_asked"]
+[connection signal="finished" from="Bench" to="." method="_on_bench_finished"]
 [connection signal="changed" from="Mind" to="." method="_on_mind_changed"]
 
 [editable path="Layout/Chat/Margin/Column/Tabs"]

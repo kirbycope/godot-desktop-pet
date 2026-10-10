@@ -44,6 +44,7 @@ dependencies {
     // These two are also named in export_plugin.gd, which adds them to the app.
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.0")
 }
 
 val copyDebugAAR by tasks.registering(Copy::class) {

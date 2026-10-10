@@ -412,21 +412,76 @@ the desk, "why does this crash?" reads your editor.
 - **Try local LLM** runs the whole duck on the phone (`scripts/local_brain.gd`, `LocalBrain`): its
   own name, personality, memories and conversations (a `Mind` in the phone's `user://duck`, seeded
   from `seed/` as on the PC), its own Pomodoro timer, every tab working, and answers said in the
-  phone's own voice, picked on its Settings tab. It loads what the phone can run: first Gemini Nano,
-  Android's own model, which AICore runs on the phone's NPU (through the `GeminiNano` plugin, below),
-  and where the phone has none, the largest model that fits its free memory through
-  [NobodyWho](https://github.com/nobodywho-ooo/nobodywho) (llama.cpp on the GPU, `model_path`
-  "auto": from Qwen3 0.6B up to Gemma 4 12B; on a 12 GB phone one of 2 to 4B, a 1.5 to 3 GB
-  download the first time, then offline). "Auto" judges by the memory free at that moment, so once
-  a model is downloaded it stays the duck's model and later starts load it straight away. The header
-  and the Stats tab name it and count the download's megabytes as they come. On a Galaxy S24 Ultra,
-  whose AICore does not offer Gemini Nano to apps (`606 FEATURE_NOT_FOUND`), it picked Qwen 3.5 2B,
-  1.2 GB in about a minute and a half; the first answer took under a minute, most of it reading the
-  duck's personality, and the next ones a few seconds, as that stays read. Thinking is turned off, as the PC duck leaves reasoning
+  phone's own voice, picked on its Settings tab. It loads what the phone can run (the **Auto**
+  choice): first Gemini Nano, Android's own model, which AICore runs on the phone's NPU (through the
+  `GeminiNano` plugin, below); where the phone has none, Gemma 4 E2B, the open, Apache 2.0 model
+  Gemini Nano 4 is built on, through Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM)
+  on the phone's GPU, a 2.6 GB download the first time and then offline; where the GPU will not take
+  it, the same file on the CPU; and last, in a build without the plugin,
+  [NobodyWho](https://github.com/nobodywho-ooo/nobodywho) (llama.cpp) with `model_path`. The Stats
+  tab picks any other engine and model instead (below). On a Galaxy S24 Ultra, whose AICore does not
+  offer Gemini Nano to apps (`606 FEATURE_NOT_FOUND`), Gemma 4 E2B on the GPU gives its first answer
+  in under 4 s and the next ones in about 2, at 28 tokens a second, where the same model through
+  NobodyWho took a minute at 1.5 tokens a second ([BENCHMARKS.md](BENCHMARKS.md)). The first answer
+  is the slow one, as it reads the duck's personality, which then stays read. Once downloaded, a model
+  stays the duck's and later starts load it straight away. The header and the Stats tab name it and
+  count the download's megabytes as they come. Thinking is turned off, as the PC duck leaves reasoning
   models out, and emoji and markdown are never said. The mic is off in this mode, since speech is
   written down on the PC; type instead. The model lets go of its memory whenever it is not in use:
   when the app goes to the background (and wakes again, from the model already downloaded, when it
   comes back), when the app closes, on **Stop the model** on the Stats tab, and on **Find PC**.
+
+### Picking the phone's model, and the benchmark
+
+With no PC, the Stats tab's list picks how the duck thinks on the phone: **Auto** (above), or one of
+`LocalBrain.SETUPS`, an engine, a model and the chip it runs on:
+
+| Engine | Models | Runs on |
+| --- | --- | --- |
+| NobodyWho (llama.cpp) | Gemma 4 E2B and E4B, Qwen 3.5 2B and 4B, each at Q4_K_M | the GPU through Vulkan, as NobodyWho decides |
+| [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) 0.18.0, Google's own engine | Gemma 4 E2B and E4B, from [litert-community](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) | the CPU or the GPU (OpenCL); the smaller `-gpu` files on the GPU only, which write nonsense on a Snapdragon 8 Gen 3 |
+| Gemini Nano | whatever the phone's AICore has | the NPU |
+
+A setup is tried as it is, with nothing to fall back on. Picking one lets go of the model running,
+downloads the new one the first time (LiteRT-LM's from Hugging Face, into the app's cache), and
+deletes the old file once the new one is up. LiteRT-LM is reached through the same Android plugin
+as Gemini Nano (`android_plugin/`, `LiteRtLm` singleton); Google publishes no `.litertlm` of
+Gemma 4 for the Snapdragon 8 Gen 3's NPU (only for the 8 Elite, `sm8750`), so on a Galaxy S24 it
+runs on the CPU or GPU.
+
+Every download, start and answer is timed and kept in `user://llm_metrics.jsonl` on the phone
+(`scripts/llm_metrics.gd`, `LlmMetrics`), one JSON line each, in everyday use as in a benchmark:
+the download's size, time and speed; the warm-up from the end of the download to the model being
+ready (and LiteRT-LM's own count of its start); and for each answer the time to its first word, to
+its first whole sentence (when the duck starts talking), and to its end, its length and its speed
+in tokens a second, the first answer after a start marked apart from the warmed-up ones. LiteRT-LM
+adds its own time to first token and its prefill and decode speeds. Each line also carries the
+app's memory, the memory the phone has left, the battery's temperature and Android's thermal state
+(a hot phone slows its own chips down), from the plugin's `DuckDevice` singleton. To take the file
+off the phone:
+
+```powershell
+adb exec-out run-as com.kirbycope.duck cat files/llm_metrics.jsonl > llm_metrics.jsonl
+```
+
+**Run the benchmark** on the Stats tab (`scripts/local_bench.gd`, `LocalBench`) tries every setup in
+turn under the same conditions: it lets go of the model before, deletes every downloaded model and
+what LiteRT-LM compiled for the GPU, waits ten seconds for the phone to settle, then downloads and
+starts the setup and asks it the same four lines, the first cold and three warmed up. A phone warm
+from a download slows its own chips down (on the first try, Gemma 4 E2B's first answer came at
+1.2 tokens a second with Android's thermal state at "moderate"), so before each setup starts, and
+again before its first line, it waits until the phone is not throttling and its battery is back
+within 1 C of where it was when the benchmark began (a phone on its charger idles at about 37 C, so
+no fixed figure fits every phone), up to ten minutes, and records the wait. The lines and
+answers show in the chat but are not said aloud, and they go into a mind of their own
+(`user://bench`), so the duck's memories and conversations are untouched. The Stats tab then shows
+the last benchmark setup by setup; going to the background stops it, since Android slows an app
+there, and pressing it again takes the same run up where it stopped (the setup it was in the middle
+of from the start, and any that failed), even after the app was reinstalled, as the metrics file says which setups are
+done. Afterwards the duck starts its own model again, downloading it anew, as the benchmark
+deleted it. All eleven setups download about 31 GB in all, so run it on Wi-Fi. The results so far,
+with what each setup said, are in [BENCHMARKS.md](BENCHMARKS.md); read the answers as well as the
+times, since the fastest setups on the S24 wrote gibberish.
 
 Measured on the PC and an Android emulator on it (October 2026): the PC's echo of your line in a few
 milliseconds, the first sentence on the phone 1.3 s after sending, and the first sentence's audio
@@ -476,11 +531,12 @@ passing the package name in a `--package_file`, since a `.bat` splits it at the 
 templates from the `4.8-dev6` release of godot-builds. Then:
 
 The local LLM needs two more things, once: NobodyWho, fetched rather than committed, and the
-`GeminiNano` plugin's AARs, built from `android_plugin/` with its Gradle wrapper into
-`addons/GeminiNano/` (the AARs are committed, so this is only needed after changing the plugin).
+`GeminiNano` plugin's AARs (Gemini Nano, LiteRT-LM and the phone's own stats), built from
+`android_plugin/` with its Gradle wrapper into `addons/GeminiNano/` (the AARs are committed, so this
+is only needed after changing the plugin; LiteRT-LM is built with Kotlin 2.4, so the plugin is too).
 The export is a Gradle build, which also installs Godot's Android build template into `android/`
-(git-ignored) and fetches ML Kit from Google's Maven repository, so the first one takes a few
-minutes:
+(git-ignored) and fetches ML Kit and LiteRT-LM from Google's Maven repository, so the first one takes
+a few minutes:
 
 ```powershell
 python tools/fetch_nobodywho.py
@@ -712,7 +768,8 @@ The settings are exported on the nodes of `scenes/pet.tscn` and `scenes/duck.tsc
 | `Duck` | `tomato_skin`, `tomato_beak` | the tomato's red body and red-orange beak, materials in `duck.tscn` |
 | `Pet` | `leaf_reach` | 26 px: how far above the head the part that takes the mouse reaches while it is a tomato, so the leaves are drawn |
 | `Pet` | `dock_margin`, `dock_seconds` | 8 px from the right and 40 px from the top: where the duck sits while the timer runs; 0.9 s to glide there |
-| `LocalBrain` (phone app) | `model_path`, `context_tokens`, `role` | "auto": the largest NobodyWho model that fits the phone's free memory, or an `hf://` path to a .gguf; 4096 tokens; the phone duck's job |
+| `LocalBench` (phone app) | `prompts`, `setups`, `settle_seconds`, `cool_thermal`, `cool_rise_c`, `cool_timeout`, `start_timeout`, `answer_timeout` | four lines; every setup; 10 s between setups; no throttling and the battery within 1 C of its temperature at the start, waiting up to 10 min; 30 min to download and start, 5 min an answer |
+| `LocalBrain` (phone app) | `setup_id`, `auto_setups`, `metrics_path`, `model_path`, `context_tokens`, `role` | "auto", the Stats tab's choice saved in `user://remote.cfg`; Gemma 4 E2B on LiteRT-LM's GPU, then its CPU; `user://llm_metrics.jsonl`; for NobodyWho, Gemma 4 E2B at Q4_K_M (`hf://NobodyWho/Google_Gemma4-E2B-GGUF/gemma-4-E2B-it-Q4_K_M.gguf`), or "auto" for the largest NobodyWho model that fits the phone's free memory, which a named model that will not load gives way to; 4096 tokens; the phone duck's job |
 | `Pomodoro` | `rounds` | 4 focus rounds before the long break; the lengths themselves are on the tab |
 | `Brain` | `preferences` | `resources/model_preferences.tres`: the ranked model lists and `memory_share` |
 | `Brain` | `model_alias` | empty, so the model is chosen for the machine; set it to force one |
@@ -761,10 +818,15 @@ scripts/searcher.gd         looks things up on DuckDuckGo when asked to
 scripts/remote.gd           lets the phone app talk to the duck: the WebSocket server and the beacon
 scenes/remote.tscn          the phone app: the duck on top, the same tabs below, in the phone's sizes
 scripts/remote_app.gd       the phone app's pairing, chat, voice and the duck's moods, and its two modes with no PC
-scripts/local_brain.gd      the phone's own brain with no PC: Gemini Nano, or NobodyWho
-android_plugin/             the GeminiNano Android plugin's Kotlin source and Gradle project
-addons/GeminiNano/          the plugin, built: its AARs and the export script that adds it and ML Kit to the app
+scripts/local_brain.gd      the phone's own brain with no PC: Gemini Nano, LiteRT-LM or NobodyWho, timed
+scripts/llm_metrics.gd      the phone's model metrics: a JSON line per download, start and answer, and their summary
+scripts/local_bench.gd      the benchmark: every engine and model on the phone in turn, from a clean start
+android_plugin/             the GeminiNano Android plugin's Kotlin source and Gradle project: Gemini Nano, LiteRT-LM, DuckDevice
+addons/GeminiNano/          the plugin, built: its AARs and the export script that adds it, ML Kit and LiteRT-LM to the app
 tools/fetch_nobodywho.py    fetches NobodyWho into addons/nobodywho
+tools/llm_report.py         turns the phone's model metrics into a comparison table
+BENCHMARKS.md               the phone models' benchmark results, kept per phone
+benchmarks/                 each benchmark's raw metrics lines
 scripts/suds.gd             the bubble bath's foam, round the duck and floating about
 assets/water/               the phone's bath: the water, the bubbles and the suds shaders
 export_presets.cfg          the Android export

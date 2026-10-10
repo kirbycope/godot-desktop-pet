@@ -120,6 +120,22 @@ func test_the_stats_tab_stops_and_starts_the_model() -> void:
 	assert_true(tabs.model_button.disabled, "grey while one is loading")
 
 
+func test_the_stats_tab_picks_a_setup_and_runs_the_benchmark() -> void:
+	tabs.show_setups([{"id": "auto", "label": "Auto"}, {"id": "litertlm-gemma4-e2b-gpu", "label": "Gemma 4 E2B, LiteRT-LM GPU"}], "litertlm-gemma4-e2b-gpu")
+	assert_eq(tabs.setup_list.item_count, 2)
+	assert_eq(tabs.setup_list.selected, 1, "the setup in use is the one picked")
+	tabs.setup_list.item_selected.emit(0)
+	assert_signal_emitted_with_parameters(tabs, "setup_chosen", ["auto"])
+	tabs.show_bench(false)
+	tabs.bench_button.pressed.emit()
+	assert_signal_emitted_with_parameters(tabs, "bench_toggled", [true])
+	tabs.show_bench(true)
+	assert_eq(tabs.bench_button.text, "Stop the benchmark")
+	assert_true(tabs.setup_list.disabled, "no picking while it runs")
+	tabs.bench_button.pressed.emit()
+	assert_signal_emitted_with_parameters(tabs, "bench_toggled", [false])
+
+
 func test_a_bubble_is_as_wide_as_its_text_up_to_the_room() -> void:
 	assert_eq(DuckTabs.bubble_width(120.4, 600.0), 123.0)
 	assert_eq(DuckTabs.bubble_width(900.0, 600.0), 600.0)

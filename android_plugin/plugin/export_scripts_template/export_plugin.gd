@@ -1,6 +1,7 @@
 @tool
 extends EditorPlugin
-## Adds the GeminiNano Android plugin, and the libraries it needs, to the Android export.
+## Adds the GeminiNano Android plugin (Gemini Nano, LiteRT-LM and the phone's own stats), and the
+## libraries it needs, to the Android export.
 
 var export_plugin: AndroidExportPlugin
 
@@ -26,7 +27,7 @@ class AndroidExportPlugin extends EditorExportPlugin:
 		return PackedStringArray([PLUGIN_NAME + "/bin/%s/%s-%s.aar" % [kind, PLUGIN_NAME, kind]])
 
 	func _get_android_dependencies(_platform: EditorExportPlatform, _debug: bool) -> PackedStringArray:
-		return PackedStringArray(["com.google.mlkit:genai-prompt:1.0.0-beta4", "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"])
+		return PackedStringArray(["com.google.mlkit:genai-prompt:1.0.0-beta4", "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2", "com.google.ai.edge.litertlm:litertlm-android:0.18.0"])
 
 	func _get_name() -> String:
 		return PLUGIN_NAME

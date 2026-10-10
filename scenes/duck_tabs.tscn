@@ -267,6 +267,17 @@ tooltip_text = "Stop the language model to free its memory, or start it again. T
 disabled = true
 text = "Stop the model"
 
+[node name="Setup" type="OptionButton" parent="Stats"]
+visible = false
+layout_mode = 2
+tooltip_text = "Which engine and model the duck thinks with on this phone. Changing it deletes the model in use and downloads the new one."
+
+[node name="Bench" type="Button" parent="Stats"]
+visible = false
+layout_mode = 2
+tooltip_text = "Tries every engine and model on this phone in turn, deleting each before the next, and records how fast each downloads, starts and answers."
+text = "Run the benchmark"
+
 [node name="Settings" type="VBoxContainer" parent="."]
 visible = false
 layout_mode = 2
@@ -399,6 +410,8 @@ text = "Open folder"
 [connection signal="value_changed" from="Pomodoro/Lengths/Long" to="." method="_on_length_changed"]
 [connection signal="timeout" from="Pomodoro/Tick" to="." method="_on_tick_timeout"]
 [connection signal="pressed" from="Stats/Model" to="." method="_on_model_pressed"]
+[connection signal="item_selected" from="Stats/Setup" to="." method="_on_setup_selected"]
+[connection signal="pressed" from="Stats/Bench" to="." method="_on_bench_pressed"]
 [connection signal="item_selected" from="Settings/Voices" to="." method="_on_voices_item_selected"]
 [connection signal="pressed" from="Settings/Buttons/Test" to="." method="_on_test_pressed"]
 [connection signal="pressed" from="Settings/Buttons/Apply" to="." method="_on_apply_pressed"]

@@ -90,6 +90,8 @@ var _utterance: int = 0
 @onready var local_pomodoro: Pomodoro = $Pomodoro
 @onready var mind: Mind = $Mind
 @onready var local_brain: LocalBrain = $LocalBrain
+## Tries every engine and model on this phone in turn (the Stats tab's Run the benchmark).
+@onready var bench: LocalBench = $Bench
 @onready var pairing: Control = $Pairing
 @onready var found_list: ItemList = $Pairing/Margin/Column/Found
 @onready var address: LineEdit = $Pairing/Margin/Column/Address
@@ -119,6 +121,10 @@ func _ready() -> void:
 	address.text = _host
 	code_input.text = _code
 	_muted = bool(config.get_value("sound", "muted", false))
+	local_brain.setup_id = str(config.get_value("local", "setup", local_brain.setup_id))
+	tabs.show_setups(setup_items(), local_brain.setup_id)
+	tabs.show_bench(false)
+	_show_phone_model_controls()
 	tabs.mute_box.set_pressed_no_signal(_muted)
 	tabs.mute_box.tooltip_text = "Say nothing on this phone: answers are written only, and the PC makes no audio for it."
 	var mic: String = Listener.load_device(Listener.SETTINGS_PATH)
@@ -407,6 +413,8 @@ func _on_tabs_line_sent(line: String) -> void:
 	if mode != Mode.LOCAL:
 		_tell_pc({"say": line})
 		return
+	if bench.running:
+		return
 	var request: Dictionary = Pomodoro.request_in(line)
 	if not request.is_empty():
 		var said: String = local_pomodoro.carry_out(request)
@@ -494,6 +502,7 @@ func _go_alone(alone: Mode) -> void:
 	tabs.pairing_label.text = "No PC: the duck runs on this phone."
 	tabs.current_tab = 0
 	_set_local_entry()
+	_show_phone_model_controls()
 
 
 ## In local mode the box opens once a model is ready; the mic stays off, as the PC is what writes
@@ -522,6 +531,8 @@ func _on_model_toggled(run: bool) -> void:
 	if mode != Mode.LOCAL:
 		_tell_pc({"model": run})
 		return
+	if bench.running:
+		return
 	if run:
 		local_brain.start()
 	else:
@@ -539,7 +550,12 @@ var _wake_local: bool = false
 func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_APPLICATION_PAUSED:
-			if mode == Mode.LOCAL and (local_brain.is_ready() or local_brain.is_starting()):
+			# A benchmark in the background would measure a phone saving its battery, so it stops,
+			# to be taken up again with Run the benchmark; the duck's own model starts once it has.
+			if bench.running:
+				bench.cancel()
+				local_brain.stop()
+			elif mode == Mode.LOCAL and (local_brain.is_ready() or local_brain.is_starting()):
 				_wake_local = true
 				DisplayServer.tts_stop()
 				local_brain.stop()
@@ -588,14 +604,80 @@ func _take_notes() -> String:
 	return text
 
 
-## The Stats tab with no PC: which model answers on this phone, and how it is going.
+## The Stats tab with no PC: which model answers on this phone, how it is going, and the last
+## benchmark's results.
 func local_stats() -> String:
-	return "%s\nModel: %s\nEngine: %s" % [local_brain.status, local_brain.model_name if not local_brain.model_name.is_empty() else "not loaded yet", local_brain.engine if not local_brain.engine.is_empty() else "none yet"]
+	var text: String = "%s\nModel: %s\nEngine: %s" % [local_brain.status, local_brain.model_name if not local_brain.model_name.is_empty() else "not loaded yet", local_brain.engine if not local_brain.engine.is_empty() else "none yet"]
+	var results: String = LlmMetrics.summary(LlmMetrics.read(local_brain.metrics_path)) if not local_brain.metrics_path.is_empty() else ""
+	return text + ("\n\n" + results if not results.is_empty() else "")
+
+
+## The Stats tab's model picker: "auto", then each of LocalBrain.SETUPS.
+static func setup_items() -> Array[Dictionary]:
+	var items: Array[Dictionary] = [{"id": "auto", "label": "Auto: Gemini Nano, else Gemma 4 E2B on the GPU"}]
+	for setup: Dictionary in LocalBrain.SETUPS:
+		items.append({"id": setup["id"], "label": setup["label"]})
+	return items
+
+
+## The model picker and the benchmark work on the phone's own model, so only with no PC.
+func _show_phone_model_controls() -> void:
+	tabs.setup_list.disabled = mode != Mode.LOCAL or bench.running
+	tabs.bench_button.disabled = mode != Mode.LOCAL
+
+
+## Another engine or model picked: the one running lets go, and the new one starts (downloading it
+## the first time; the old one's file is deleted once the new one is up).
+func _on_setup_chosen(id: String) -> void:
+	local_brain.setup_id = id
+	_save()
+	if mode == Mode.LOCAL:
+		DisplayServer.tts_stop()
+		local_brain.stop()
+		local_brain.start()
+
+
+func _on_bench_toggled(run: bool) -> void:
+	if not run:
+		bench.cancel()
+		return
+	if mode != Mode.LOCAL or bench.running:
+		return
+	DisplayServer.tts_stop()
+	tabs.show_conversation([])
+	# A locked phone sends the app to the background, which stops the benchmark.
+	DisplayServer.screen_set_keep_on(true)
+	bench.run()
+	tabs.show_bench(true)
+	_show_phone_model_controls()
+
+
+func _on_bench_progressed(text: String) -> void:
+	_set_status(text)
+	tabs.stats.text = local_stats()
+
+
+## The benchmark's line, shown in the chat as if typed, with its answer under it.
+func _on_bench_asked(line: String) -> void:
+	tabs.begin_answer(line)
+
+
+## Back to the duck's own model and conversation once the benchmark is over.
+func _on_bench_finished() -> void:
+	DisplayServer.screen_set_keep_on(local_pomodoro.is_running())
+	tabs.show_bench(false)
+	_show_phone_model_controls()
+	tabs.stats.text = local_stats()
+	if mode == Mode.LOCAL:
+		var shown: Array = Remote.shown(mind.conversation(mind.conversation_id()))
+		tabs.show_conversation(shown)
+		local_brain.new_conversation_from(shown)
+		local_brain.start()
 
 
 ## Says `text` in this phone's voice, after what it is saying unless `interrupt`.
 func _speak_here(text: String, interrupt: bool) -> void:
-	if _muted or not DisplayServer.has_feature(DisplayServer.FEATURE_TEXT_TO_SPEECH):
+	if _muted or bench.running or not DisplayServer.has_feature(DisplayServer.FEATURE_TEXT_TO_SPEECH):
 		return
 	_utterance += 1
 	DisplayServer.tts_speak(text, _phone_voice(), 70, 1.0, 1.0, _utterance, interrupt)
@@ -625,9 +707,11 @@ func _on_find_pc_pressed() -> void:
 	mode = Mode.PC
 	if local_pomodoro.is_running():
 		local_pomodoro.stop()
+	bench.cancel()
 	local_brain.stop()
 	DisplayServer.tts_stop()
 	tabs.show_model(false, false)
+	_show_phone_model_controls()
 	tabs.mic_button.tooltip_text = "Talk to the duck. It sends when you pause, and listens again after it answers. Click again to stop."
 	find_pc_button.visible = false
 	for i: int in tabs.get_tab_count():
@@ -651,7 +735,7 @@ func _on_local_pomodoro_phase_changed(phase: Pomodoro.Phase) -> void:
 	if mode == Mode.PC:
 		return
 	duck.tomato = phase != Pomodoro.Phase.OFF
-	DisplayServer.screen_set_keep_on(phase != Pomodoro.Phase.OFF)
+	DisplayServer.screen_set_keep_on(phase != Pomodoro.Phase.OFF or bench.running)
 	if phase == Pomodoro.Phase.OFF and mode == Mode.POMODORO:
 		_set_status("No PC: just the timer")
 
@@ -947,9 +1031,12 @@ func _show_pairing(note: String) -> void:
 
 func _save() -> void:
 	var config: ConfigFile = ConfigFile.new()
+	# Kept: the phone voice, saved on its own when it is picked.
+	config.load(SETTINGS_PATH)
 	config.set_value("pc", "address", _host)
 	config.set_value("pc", "code", _code)
 	config.set_value("sound", "muted", _muted)
+	config.set_value("local", "setup", local_brain.setup_id)
 	config.save(SETTINGS_PATH)
 
 

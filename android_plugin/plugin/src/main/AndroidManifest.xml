@@ -2,10 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
-        <!-- Tells Godot this is a v2 plugin named GeminiNano, and which class starts it. -->
+        <!-- Tells Godot these are v2 plugins, and which classes start them. -->
         <meta-data
             android:name="org.godotengine.plugin.v2.${godotPluginName}"
             android:value="${godotPluginPackageName}.GeminiNanoPlugin"/>
+        <meta-data
+            android:name="org.godotengine.plugin.v2.LiteRtLm"
+            android:value="${godotPluginPackageName}.LiteRtLmPlugin"/>
+        <meta-data
+            android:name="org.godotengine.plugin.v2.DuckDevice"
+            android:value="${godotPluginPackageName}.DuckDevicePlugin"/>
+        <!-- LiteRT-LM's GPU backend runs through the phone's OpenCL, where it has one. -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false"/>
+        <uses-native-library android:name="libvndksupport.so" android:required="false"/>
     </application>
 
 </manifest>

@@ -183,6 +183,7 @@ func test_the_phones_model_stops_in_the_background_and_from_the_stats_tab() -> v
 	app.get_node("Mind").root = "user://test_phone_mind"
 	# A model that cannot load, so nothing is downloaded when it wakes again.
 	app.get_node("LocalBrain").model_path = "res://no_such_model.gguf"
+	app.get_node("LocalBrain").metrics_path = ""
 	add_child_autofree(app)
 	app._go_alone(RemoteApp.Mode.LOCAL)
 	# As though a model had loaded.
@@ -202,6 +203,56 @@ func test_the_phones_model_stops_in_the_background_and_from_the_stats_tab() -> v
 	assert_true(app.local_brain.stopped, "Stop on the Stats tab")
 	assert_eq(app.tabs.model_button.text, "Start the model")
 	_remove(ProjectSettings.globalize_path("user://test_phone_mind"))
+
+
+func test_with_no_pc_the_stats_tab_picks_the_model_and_runs_the_benchmark() -> void:
+	var app: RemoteApp = (load("res://scenes/remote.tscn") as PackedScene).instantiate()
+	app.get_node("Mind").root = "user://test_phone_mind"
+	app.get_node("BenchMind").root = "user://test_phone_bench_mind"
+	app.get_node("LocalBrain").metrics_path = "user://test_phone_metrics.jsonl"
+	var bench: LocalBench = app.get_node("Bench")
+	bench.settle_seconds = 0.0
+	bench.model_folders = PackedStringArray([ProjectSettings.globalize_path("user://test_phone_models")])
+	add_child_autofree(app)
+	var ids: Array = RemoteApp.setup_items().map(func(item: Dictionary) -> String: return item["id"])
+	assert_eq(ids[0], "auto", "Auto comes first")
+	assert_eq(ids.size(), LocalBrain.SETUPS.size() + 1, "then every setup")
+	assert_true(app.tabs.setup_list.visible, "the phone shows the picker")
+	assert_true(app.tabs.bench_button.visible)
+	assert_true(app.tabs.setup_list.disabled, "but it works the phone's own model, so not while looking for the PC")
+	app._go_alone(RemoteApp.Mode.LOCAL)
+	assert_false(app.tabs.setup_list.disabled)
+	assert_false(app.tabs.bench_button.disabled)
+	# Setups that need the Android plugins fail at once on a desktop, so nothing is downloaded.
+	bench.setups = PackedStringArray(["litertlm-gemma4-e2b-gpu"])
+	app.local_brain.model_path = "res://no_such_model.gguf"
+	app.tabs.bench_button.pressed.emit()
+	assert_true(bench.running)
+	assert_eq(app.tabs.bench_button.text, "Stop the benchmark")
+	assert_true(app.tabs.setup_list.disabled, "no picking while it runs")
+	await wait_until(func() -> bool: return not bench.running, 10.0)
+	await wait_until(func() -> bool: return not app.local_brain.is_starting(), 10.0)
+	if ClassDB.class_exists(&"NobodyWhoChat"):
+		assert_engine_error("Model not found", "the duck's own stand-in model starts again after it")
+	assert_eq(app.tabs.bench_button.text, "Run the benchmark")
+	assert_eq(app.local_brain.setup_id, "auto", "the duck's own setup again")
+	assert_eq(app.local_brain.mind, app.mind, "and its own mind")
+	assert_string_contains(app.tabs.stats.text, "Gemma 4 E2B, LiteRT-LM GPU", "the results are on the Stats tab")
+	assert_string_contains(app.tabs.stats.text, "Failed: LiteRT-LM needs")
+	app.local_brain.stop()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_phone_metrics.jsonl"))
+	_remove(ProjectSettings.globalize_path("user://test_phone_mind"))
+	_remove(ProjectSettings.globalize_path("user://test_phone_bench_mind"))
+
+
+func test_the_pc_bubble_has_no_phone_model_picker() -> void:
+	var state: SceneState = (load("res://scenes/pet.tscn") as PackedScene).get_state()
+	for i: int in state.get_node_count():
+		assert_false(str(state.get_node_path(i)).ends_with("Stats/Setup"), "pet.tscn leaves the picker as duck_tabs.tscn has it: hidden")
+	var tabs: DuckTabs = (load("res://scenes/duck_tabs.tscn") as PackedScene).instantiate()
+	add_child_autofree(tabs)
+	assert_false(tabs.setup_list.visible)
+	assert_false(tabs.bench_button.visible)
 
 
 func test_a_paired_phones_model_button_works_the_pcs_model() -> void:

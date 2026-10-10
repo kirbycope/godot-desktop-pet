@@ -33,8 +33,13 @@ The phone app's local LLM, for when there is no PC:
   is fetched into `addons/nobodywho` by `tools/fetch_nobodywho.py` and not committed. It is built on
   [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT). The model it picks for the phone's memory
   is downloaded at run time from NobodyWho's Hugging Face mirrors and is not part of this repository:
-  Qwen3, Qwen3.5 and Qwen3.6 (Apache 2.0, by the Qwen team) or Gemma 4 (the Gemma terms of use, by
-  Google), each at Q4_K_M.
+  Gemma 4 E2B by default (Apache 2.0, by Google), or where it will not load, Qwen3, Qwen3.5 and
+  Qwen3.6 (Apache 2.0, by the Qwen team) or another Gemma 4, each at Q4_K_M.
+- [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) 0.18.0, by Google, Apache 2.0, is added
+  to the Android export from Google's Maven repository (`com.google.ai.edge.litertlm:litertlm-android`)
+  and is not part of this repository. The Gemma 4 E2B and E4B `.litertlm` models it runs (Apache 2.0,
+  by Google, converted by [litert-community](https://huggingface.co/litert-community)) are downloaded
+  at run time from Hugging Face and are not part of this repository either.
 - Gemini Nano is Android's own model, run by the phone's AICore and reached through Google's
   [ML Kit GenAI Prompt API](https://developers.google.com/ml-kit/genai/prompt/android/get-started)
   (`com.google.mlkit:genai-prompt`, under the ML Kit terms of service), which the Android export
